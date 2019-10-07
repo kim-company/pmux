@@ -28,8 +28,10 @@ import (
 	"gopkg.in/pipe.v2"
 )
 
-// Verify returns an error if it is not able to find the tmux executable.
-func Verify() error {
+const defaultCmdExecTimeout = time.Millisecond * 100
+
+// verify returns an error if it is not able to find the tmux executable.
+func verify() error {
 	path, err := exec.LookPath("tmux")
 	if err != nil {
 		return fmt.Errorf("tmux is not available: %w", err)
@@ -38,7 +40,6 @@ func Verify() error {
 	return nil
 }
 
-const defaultCmdExecTimeout = time.Millisecond * 100
 
 // Version returns tmux version. Returns an error only if the command cannot
 // be executed, does not check the output produced.

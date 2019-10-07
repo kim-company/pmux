@@ -20,6 +20,8 @@ import (
 )
 
 func TestHasSession(t *testing.T) {
+	t.Parallel()
+
 	sid := NewSID()
 	if HasSession(sid) {
 		t.Fatalf("session <%s> SHOULD NOT BE present", sid)
@@ -66,7 +68,7 @@ func TestVersion(t *testing.T) {
 
 func TestVerify(t *testing.T) {
 	t.Parallel()
-	if err := Verify(); err != nil {
+	if err := verify(); err != nil {
 		t.Fatal(err)
 	}
 }
