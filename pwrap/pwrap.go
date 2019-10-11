@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package pwrap provides a process wrapper that is suitable to be executed
+// inside a tmux session, allowing to later retriving its stdout, stderr and
+// initial configuration.
 package pwrap
 
 import (
