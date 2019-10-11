@@ -44,6 +44,8 @@ const (
 	FileSID    = "sid"
 )
 
+// RootDir returns an ``Opt'' function which sets process wrapper's root
+// directory.
 func RootDir(path string) Opt {
 	return func(p *PWrap) error {
 		// MkdirAll will not do anything if the directory is already there.
