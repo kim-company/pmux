@@ -41,7 +41,6 @@ func verify() error {
 	return nil
 }
 
-
 // Version returns tmux version. Returns an error only if the command cannot
 // be executed, does not check the output produced.
 func Version() (string, error) {
@@ -83,8 +82,8 @@ func NewSession(sid, name string, args ...string) error {
 	return nil
 }
 
-// KillSession destroys a session, terminating all its child processes. Does not
-// return an error if "sid" does not belong to any living session.
+// KillSession destroys a session, terminating all its child processes. If the session
+// identifier does not belong to pmux returns an error.
 func KillSession(sid string) error {
 	if err := validateSID(sid); err != nil {
 		return fmt.Errorf("cannot terminate session: %w", err)
