@@ -154,7 +154,7 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
-	if err = tmux.NewSession(sid, "pmux", "wrap", p.name, "--root="+p.rootDir, "--sid="+sid); err != nil {
+	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--root="+p.rootDir, "--sid="+sid); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 
