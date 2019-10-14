@@ -27,10 +27,7 @@ func TestHasSession(t *testing.T) {
 		t.Fatalf("session <%s> SHOULD NOT BE present", sid)
 	}
 
-	// Start a session using the "yes" utility.
-	// From yes manual:
-	// yes outputs expletive, or, by default, ``y'', forever.
-	if err := NewSession(sid, "yes"); err != nil {
+	if err := NewSession(sid, "sleep", "10"); err != nil {
 		t.Fatal(err)
 	}
 	sessions, err := ListSessions()
@@ -40,7 +37,7 @@ func TestHasSession(t *testing.T) {
 
 	t.Logf("Sessions: %v", sessions)
 	if HasSession(sid) {
-		t.Fatalf("session <%s> SHOULD BE present", sid)
+		t.Fatalf("Session <%s> SHOULD BE present", sid)
 	}
 
 	// Now kill this session and repeat the checks.
@@ -49,7 +46,7 @@ func TestHasSession(t *testing.T) {
 	}
 
 	if HasSession(sid) {
-		t.Fatalf("session <%s> SHOULD NOT BE present", sid)
+		t.Fatalf("Session <%s> SHOULD NOT BE present", sid)
 	}
 }
 
@@ -75,7 +72,7 @@ func TestVerify(t *testing.T) {
 
 func TestValidateSID(t *testing.T) {
 	var err error
-	err = validateSID("pmux-abc")
+	err = validateSID("pmux-f2dcf053-0966-4d51-984e-0a4de0f0b0d6")
 	if err != nil {
 		t.Fatalf("Unexpected validation error: %v", err)
 	}

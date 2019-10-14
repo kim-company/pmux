@@ -16,10 +16,9 @@
 package tmux
 
 import (
+	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os/exec"
 	"strings"
@@ -37,7 +36,7 @@ func verify() error {
 	if err != nil {
 		return fmt.Errorf("tmux is not available: %w", err)
 	}
-	log.Printf("using tmux located at: %v", path)
+	log.Printf("[INFO] using tmux located at: %v", path)
 	return nil
 }
 
@@ -99,25 +98,28 @@ func KillSession(sid string) error {
 // pmux. Valid partial results may be returned (i.e. even though the error returned
 // is not nil, the list of session identifiers up to that point may be valid).
 func ListSessions() ([]string, error) {
-	p := pipe.Exec("tmux", "list-session")
+	p := pipe.Exec("tmux", "list-sessions")
 	acc := []string{}
-	stdout, _, err := pipe.DividedOutputTimeout(p, defaultCmdExecTimeout)
+
+	stdout, stderr, err := pipe.DividedOutputTimeout(p, defaultCmdExecTimeout)
 	if err != nil {
-		return acc, fmt.Errorf("unable to list tmux sessions: %w", err)
+		return acc, fmt.Errorf("unable to list tmux sessions: %w, %v", err, string(stderr))
 	}
 	if len(stdout) == 0 {
 		return acc, nil
 	}
 	buf := bytes.NewBuffer(stdout)
-	for line, err := buf.ReadString('\n'); err != nil; {
+	s := bufio.NewScanner(buf)
+	for s.Scan() {
+		line := s.Text()
 		sid := strings.Split(line, ":")[0]
 		if err = validateSID(sid); err != nil {
-			log.Printf("ListSessions: skipping line <%v>: %v", line, err)
+			log.Printf("[WARN] ListSessions: skipping line <%v>: %v", line, err)
 			continue
 		}
 		acc = append(acc, string(sid))
 	}
-	if err != nil && !errors.Is(err, io.EOF) {
+	if s.Err() != nil {
 		return acc, fmt.Errorf("something went wrong while parsing list-sessions output: %w", err)
 	}
 
@@ -128,6 +130,7 @@ func ListSessions() ([]string, error) {
 func HasSession(sid string) bool {
 	sessions, err := ListSessions()
 	if err != nil {
+		log.Printf("[ERROR] HasSession: %v", err)
 		return false
 	}
 
