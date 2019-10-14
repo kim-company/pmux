@@ -28,9 +28,9 @@ import (
 
 // PWrap is a process wrapper.
 type PWrap struct {
+	rootDir string
 	sid     string
 	name    string
-	rootDir string
 }
 
 // SID returns the assigned session identifier.
@@ -40,11 +40,11 @@ func (p *PWrap) SID() string {
 
 // WorkDir returns the current working directory.
 func (p *PWrap) WorkDir() string {
-	return p.rootDir
+	return filepath.Join(p.rootDir, p.sid)
 }
 
 // New is used to instantiate new PWrap instances.
-func New(opts ...Opt) (*PWrap, error) {
+func New(opts ...func(*PWrap) error) (*PWrap, error) {
 	// Assign executable name and session identifer.
 	pw := &PWrap{sid: tmux.NewSID()}
 
@@ -57,13 +57,8 @@ func New(opts ...Opt) (*PWrap, error) {
 	return pw, nil
 }
 
-// Opt defines the signature of the a configuration function used
-// when creating new instances of ``PWrap'' with ``New''.
-type Opt func(*PWrap) error
-
-// Execname return an ``Opt'' function which sets process wrapper's executable name, checking
-// if the executable is visible.
-func ExecName(n string) Opt {
+// ExecName sets and checks the executable name option.
+func ExecName(n string) func(*PWrap) error {
 	return func(p *PWrap) error {
 		// Is "n" visible?
 		if _, err := exec.LookPath(n); err != nil {
@@ -81,36 +76,35 @@ const (
 	FileSID    = "sid"
 )
 
-// OverrideSID returns an ``Opt'' function which overrides the process wrapper's
-// session identifer.
+// OverrideSID sets the sid option.
 // This function has to be called before "RootDir" if used in the ``New'' function
 // in order for it to make effect.
-func OverrideSID(sid string) Opt {
+func OverrideSID(sid string) func(*PWrap) error {
 	return func(p *PWrap) error {
 		p.sid = sid
 		return nil
 	}
 }
 
-// RootDir returns an ``Opt'' function which sets process wrapper's root
-// directory.
-func RootDir(path string) Opt {
+// RootDir sets the root directory option.
+func RootDir(path string) func(*PWrap) error {
 	return func(p *PWrap) error {
-		path = filepath.Join(path, p.sid)
-		// MkdirAll will not do anything if the directory is already there.
+		p.rootDir = path
+		dir := filepath.Join(path, p.sid)
 
-		if err := os.MkdirAll(path, os.ModePerm); err != nil {
+		// MkdirAll will not do anything if the directory is already there.
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			return err
 		}
 		files := []string{FileStderr, FileStdout, FileConfig, FileSID}
 		for _, v := range files {
-			path := filepath.Join(path, v)
-			if _, err := os.Stat(path); err == nil {
+			file := filepath.Join(dir, v)
+			if _, err := os.Stat(file); err == nil {
 				// In this case we want to stop: file already exists.
 				continue
 			}
 
-			f, err := os.Create(path)
+			f, err := os.Create(file)
 			if err != nil {
 				return err
 			}
@@ -118,7 +112,6 @@ func RootDir(path string) Opt {
 				return err
 			}
 		}
-		p.rootDir = path
 		return nil
 	}
 }
@@ -126,7 +119,7 @@ func RootDir(path string) Opt {
 // Path returns the full path of the file as if it were inside "p"'s root
 // directory. Returns an error if the file is not present in the directory.
 func (p *PWrap) Path(rel string) (string, error) {
-	path := filepath.Join(p.rootDir, rel)
+	path := filepath.Join(p.WorkDir(), rel)
 	if _, err := os.Stat(path); err != nil {
 		return "", err
 	}
@@ -157,7 +150,7 @@ func (p *PWrap) StartSession() (string, error) {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 	defer f.Close()
-	_, err = f.Write([]byte(sid))
+	_, err = f.Write([]byte(sid + "\n"))
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
@@ -219,7 +212,7 @@ func (p *PWrap) Trash() error {
 func (p *PWrap) trashFiles() error {
 	expected := []string{FileStderr, FileStdout, FileConfig, FileSID}
 	found := 0
-	filepath.Walk(p.rootDir, func(path string, info os.FileInfo, err error) error {
+	filepath.Walk(p.WorkDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -233,7 +226,7 @@ func (p *PWrap) trashFiles() error {
 
 	})
 	if found == len(expected)+1 /* 1 for the directory itself */ {
-		return os.RemoveAll(p.rootDir)
+		return os.RemoveAll(p.WorkDir())
 	}
 
 	return nil

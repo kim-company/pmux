@@ -27,6 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var execName string
 var port int
 
 // serverCmd represents the server command
@@ -40,7 +41,7 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		r := pmuxapi.NewRouter()
+		r := pmuxapi.NewRouter(execName, pmuxapi.KeepFiles(true))
 		srv := &http.Server{
 			Addr:         fmt.Sprintf("0.0.0.0:%d", port),
 			WriteTimeout: time.Second * 15,
@@ -49,7 +50,8 @@ to quickly create a Cobra application.`,
 			Handler:      r,
 		}
 		// Run our server in a goroutine so that it doesn't block.
-		log.Printf("Listening on addr: %v", srv.Addr)
+		log.Printf("Port: %d, Executable: %s", port, execName)
+		log.Printf("Server listening...")
 		go func() {
 			if err := srv.ListenAndServe(); err != nil {
 				log.Println(err)
@@ -95,4 +97,5 @@ func init() {
 
 func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 4002, "Server listening port.")
+	serverCmd.Flags().StringVarP(&execName, "exec-name", "n", "yes", "Pmux will spawn sessions running this executable")
 }

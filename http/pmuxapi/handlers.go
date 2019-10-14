@@ -79,6 +79,7 @@ func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 			return
 		}
 
+		log.Printf("[INFO] Starting [%v] session, working dir: %v", execName, pw.WorkDir())
 		sid, err := pw.StartSession()
 		if err != nil {
 			h.writeError(w, err, http.StatusInternalServerError)
@@ -91,7 +92,7 @@ func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 	}
 }
 
-func (h *SessionHandler) HandleDelete(trashFiles bool) http.HandlerFunc {
+func (h *SessionHandler) HandleDelete(keepFiles bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sid, ok := r.Context().Value("sid").(string)
 		if !ok || sid == "" {
@@ -106,7 +107,7 @@ func (h *SessionHandler) HandleDelete(trashFiles bool) http.HandlerFunc {
 		}
 
 		deleteFunc := pw.Trash
-		if !trashFiles {
+		if keepFiles {
 			deleteFunc = pw.KillSession
 		}
 		if err = deleteFunc(); err != nil {

@@ -24,24 +24,36 @@ import (
 
 type Router struct {
 	*mux.Router
+	keepFiles bool
+	execName  string
 }
 
-func NewRouter() *Router {
-	r := &Router{mux.NewRouter()}
+func KeepFiles(ok bool) func(*Router) {
+	return func(r *Router) {
+		r.keepFiles = ok
+	}
+}
+
+// NewRouter returns a new ``Router'' instance which satisfies the ``http.Handler''
+// interface.
+func NewRouter(execName string, opts ...func(*Router)) *Router {
+	r := &Router{Router: mux.NewRouter()}
 
 	r.Use(loggingMiddleware)
 	r.HandleFunc("/health_check", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Online!")
-
+		fmt.Fprintln(w, "Online!")
 	}).Methods("GET")
 
-	// API v1
-	// TODO: flexibility!
+	// Apply options on router.
+	for _, f := range opts {
+		f(r)
+	}
+
 	h := &SessionHandler{}
-	v1 := r.PathPrefix("api/v1")
-	v1.HandlerFunc(h.HandleList()).Methods("GET").Path("/sessions")
-	v1.HandlerFunc(h.HandleCreate("yes")).Methods("POST").Path("/sessions")
-	v1.HandlerFunc(h.HandleDelete(false)).Methods("DELETE").Path("/sessions/{sid}")
+	v1 := r.PathPrefix("/api/v1/" + execName).Subrouter()
+	v1.HandleFunc("/sessions", h.HandleList()).Methods("GET")
+	v1.HandleFunc("/sessions", h.HandleCreate(execName)).Methods("POST")
+	v1.HandleFunc("/sessions/{sid}", h.HandleDelete(r.keepFiles)).Methods("DELETE")
 
 	return r
 }
