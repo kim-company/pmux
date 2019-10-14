@@ -50,7 +50,7 @@ func NewRouter(execName string, opts ...func(*Router)) *Router {
 	}
 
 	h := &SessionHandler{}
-	v1 := r.PathPrefix("/api/v1/" + execName).Subrouter()
+	v1 := r.PathPrefix("/api/v1").Subrouter()
 	v1.HandleFunc("/sessions", h.HandleList()).Methods("GET")
 	v1.HandleFunc("/sessions", h.HandleCreate(execName)).Methods("POST")
 	v1.HandleFunc("/sessions/{sid}", h.HandleDelete(r.keepFiles)).Methods("DELETE")
