@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/gorilla/mux"
 	"github.com/kim-company/pmux/pwrap"
 	"github.com/kim-company/pmux/tmux"
 )
@@ -94,8 +95,8 @@ func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 
 func (h *SessionHandler) HandleDelete(keepFiles bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sid, ok := r.Context().Value("sid").(string)
-		if !ok || sid == "" {
+		sid := mux.Vars(r)["sid"]
+		if sid == "" {
 			h.writeError(w, fmt.Errorf("unable to retrieve session identifier from request context"), http.StatusBadRequest)
 			return
 		}
