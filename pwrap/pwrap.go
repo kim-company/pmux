@@ -33,9 +33,46 @@ type PWrap struct {
 	rootDir string
 }
 
+// SID returns the assigned session identifier.
+func (p *PWrap) SID() string {
+	return p.sid
+}
+
+// WorkDir returns the current working directory.
+func (p *PWrap) WorkDir() string {
+	return p.rootDir
+}
+
+// New is used to instantiate new PWrap instances.
+func New(opts ...Opt) (*PWrap, error) {
+	// Assign executable name and session identifer.
+	pw := &PWrap{sid: tmux.NewSID()}
+
+	for _, f := range opts {
+		if err := f(pw); err != nil {
+			return nil, fmt.Errorf("unable to apply option on process wrapper initialization: %w", err)
+		}
+	}
+
+	return pw, nil
+}
+
 // Opt defines the signature of the a configuration function used
 // when creating new instances of ``PWrap'' with ``New''.
 type Opt func(*PWrap) error
+
+// Execname return an ``Opt'' function which sets process wrapper's executable name, checking
+// if the executable is visible.
+func ExecName(n string) Opt {
+	return func(p *PWrap) error {
+		// Is "n" visible?
+		if _, err := exec.LookPath(n); err != nil {
+			return err
+		}
+		p.name = n
+		return nil
+	}
+}
 
 const (
 	FileStderr = "stderr"
@@ -44,11 +81,24 @@ const (
 	FileSID    = "sid"
 )
 
+// OverrideSID returns an ``Opt'' function which overrides the process wrapper's
+// session identifer.
+// This function has to be called before "RootDir" if used in the ``New'' function
+// in order for it to make effect.
+func OverrideSID(sid string) Opt {
+	return func(p *PWrap) error {
+		p.sid = sid
+		return nil
+	}
+}
+
 // RootDir returns an ``Opt'' function which sets process wrapper's root
 // directory.
 func RootDir(path string) Opt {
 	return func(p *PWrap) error {
+		path = filepath.Join(path, p.sid)
 		// MkdirAll will not do anything if the directory is already there.
+
 		if err := os.MkdirAll(path, os.ModePerm); err != nil {
 			return err
 		}
@@ -71,28 +121,6 @@ func RootDir(path string) Opt {
 		p.rootDir = path
 		return nil
 	}
-}
-
-// New is used to instantiate new PWrap instances.
-func New(ename string, opts ...Opt) (*PWrap, error) {
-	// Is "ename" visible?
-	if _, err := exec.LookPath(ename); err != nil {
-		return nil, fmt.Errorf("process wrapper validation error: %w", err)
-	}
-
-	pw := &PWrap{name: ename}
-	for _, f := range opts {
-		if err := f(pw); err != nil {
-			return nil, fmt.Errorf("unable to apply option on process wrapper initialization: %w", err)
-		}
-	}
-	// After options have been applied, validate the process
-	// wrapper before returning it.
-	if pw.rootDir == "" {
-		return nil, fmt.Errorf("process wrapper validation error: root directory was not set")
-	}
-
-	return pw, nil
 }
 
 // Path returns the full path of the file as if it were inside "p"'s root
@@ -119,7 +147,11 @@ func (p *PWrap) Open(rel string) (*os.File, error) {
 // will still be running after this function returns. The session identifier returned will be
 // stored indide the relative ``FileSID'' file. This function is a non blocking function.
 func (p *PWrap) StartSession() (string, error) {
-	sid := tmux.NewSID()
+	sid := p.SID()
+	if sid == "" {
+		return "", fmt.Errorf("could not start process wrapper session: session identifier not set")
+	}
+
 	f, err := p.Open(FileSID)
 	if err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
@@ -129,12 +161,23 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
-	if err = tmux.NewSession(sid, "pmux", "wrap", p.name, "--root="+p.rootDir); err != nil {
+	if err = tmux.NewSession(sid, "pmux", "wrap", p.name, "--root="+p.rootDir, "--sid="+sid); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 
-	p.sid = sid
 	return sid, nil
+}
+
+// KillSession kills the associated tmux session, if any is running.
+func (p *PWrap) KillSession() error {
+	if p.sid == "" {
+		return fmt.Errorf("cannot kill session if process wrapper does not have a session identifier")
+	}
+	if err := tmux.KillSession(p.sid); err != nil {
+		return fmt.Errorf("unable to kill process wrapper session: %w", err)
+	}
+	p.sid = ""
+	return nil
 }
 
 // Run executes "p"'s command and waits for it to exit. Its stderr and stdout pipes are
@@ -162,7 +205,8 @@ func (p *PWrap) Run() error {
 	return cmd.Run()
 }
 
-// Trash removes any traces of the process from the system.
+// Trash removes any traces of the process from the system. It even kills the session if any
+// is running.
 func (p *PWrap) Trash() error {
 	if p.sid != "" {
 		if err := tmux.KillSession(p.sid); err != nil {

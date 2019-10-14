@@ -18,10 +18,11 @@ import (
 	"log"
 
 	"github.com/kim-company/pmux/pwrap"
+	"github.com/kim-company/pmux/tmux"
 	"github.com/spf13/cobra"
 )
 
-var rootDir string
+var rootDir, sid string
 
 // wrapCmd represents the pwrap command
 var wrapCmd = &cobra.Command{
@@ -34,7 +35,7 @@ var wrapCmd = &cobra.Command{
 		// in a sandboxed tmux session.
 
 		name := args[0]
-		pw, err := pwrap.New(name, pwrap.RootDir(rootDir))
+		pw, err := pwrap.New(pwrap.ExecName(name), pwrap.OverrideSID(sid), pwrap.RootDir(rootDir))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -47,4 +48,5 @@ var wrapCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(wrapCmd)
 	wrapCmd.Flags().StringVarP(&rootDir, "root", "r", "", "Root process sandbox directory.")
+	wrapCmd.Flags().StringVarP(&sid, "sid", "", tmux.NewSID(), "Override session identifier.")
 }

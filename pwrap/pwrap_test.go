@@ -27,14 +27,12 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(os.TempDir(), "pwrap-test-"+uuid.New().String())
-	// "yes" is an executable available on the system. This function
-	// is supposed to return an error if the command is not available.
-	_, err := New("yes", RootDir(path))
+	pw, err := New(OverrideSID(uuid.New().String()), RootDir(os.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	path := pw.WorkDir()
 	pathStderr := filepath.Join(path, FileStderr)
 	pathStdout := filepath.Join(path, FileStdout)
 	pathConfig := filepath.Join(path, FileConfig)
@@ -51,14 +49,28 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestTrashFiles(t *testing.T) {
+func TestNew_ExecName(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(os.TempDir(), "pwrap-test-"+uuid.New().String())
-	pw, err := New("yes", RootDir(path))
+	_, err := New(ExecName("nxtfxxnd"))
+	if (err != nil && !errors.Is(err, exec.ErrNotFound)) || err == nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	_, err = New(ExecName("yes"))
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTrashFiles(t *testing.T) {
+	t.Parallel()
+
+	pw, err := New(RootDir(os.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := pw.WorkDir()
 
 	// In this case, trash files should destroy the whole
 	// directory.
@@ -72,7 +84,7 @@ func TestTrashFiles(t *testing.T) {
 	// If instead there is something else in the directory, the directory
 	// and that something else should still be there.
 	path = filepath.Join(os.TempDir(), "pwrap-test-"+uuid.New().String())
-	pw, err = New("yes", RootDir(path))
+	pw, err = New(RootDir(path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,20 +116,11 @@ func TestTrashFiles(t *testing.T) {
 	}
 }
 
-func TestNew_ExecutableMissing(t *testing.T) {
-	t.Parallel()
-
-	_, err := New("nxtfxxnd")
-	if (err != nil && !errors.Is(err, exec.ErrNotFound)) || err == nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-}
-
 func TestPath(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(os.TempDir(), "pwrap-test")
-	pw, err := New("yes", RootDir(path))
+	pw, err := New(RootDir(path))
 	if err != nil {
 		t.Fatal(err)
 	}
