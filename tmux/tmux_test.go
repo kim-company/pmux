@@ -1,5 +1,4 @@
-// Copyright 2019 KIM Keep In Mind GmbH
-//
+// Copyright 2019 KIM Keep In Mind GmbH //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -27,16 +26,10 @@ func TestHasSession(t *testing.T) {
 		t.Fatalf("session <%s> SHOULD NOT BE present", sid)
 	}
 
-	if err := NewSession(sid, "sleep", "10"); err != nil {
+	if err := NewSession(sid, "sleep", "60"); err != nil {
 		t.Fatal(err)
 	}
-	sessions, err := ListSessions()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("Sessions: %v", sessions)
-	if HasSession(sid) {
+	if !HasSession(sid) {
 		t.Fatalf("Session <%s> SHOULD BE present", sid)
 	}
 

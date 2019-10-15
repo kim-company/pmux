@@ -120,7 +120,7 @@ func ListSessions() ([]string, error) {
 		acc = append(acc, string(sid))
 	}
 	if s.Err() != nil {
-		return acc, fmt.Errorf("something went wrong while parsing list-sessions output: %w", err)
+		return acc, fmt.Errorf("something went wrong while scanning list-sessions output: %w", err)
 	}
 
 	return acc, nil
@@ -128,16 +128,7 @@ func ListSessions() ([]string, error) {
 
 // HasSession returns true if tmux is running a session named "sid".
 func HasSession(sid string) bool {
-	sessions, err := ListSessions()
-	if err != nil {
-		log.Printf("[ERROR] HasSession: %v", err)
-		return false
-	}
-
-	for _, v := range sessions {
-		if v == sid {
-			return true
-		}
-	}
-	return false
+	p := pipe.Exec("tmux", "has-session", "-t", sid)
+	err := pipe.RunTimeout(p, defaultCmdExecTimeout)
+	return err == nil
 }
