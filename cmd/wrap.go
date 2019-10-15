@@ -23,6 +23,7 @@ import (
 )
 
 var rootDir, sid string
+var execType int
 
 // wrapCmd represents the pwrap command
 var wrapCmd = &cobra.Command{
@@ -39,7 +40,8 @@ var wrapCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := pw.Run(); err != nil {
+		t := pwrap.ExecType(execType)
+		if err := pw.Run(t); err != nil {
 			log.Fatal(err)
 		}
 	},
@@ -49,4 +51,5 @@ func init() {
 	rootCmd.AddCommand(wrapCmd)
 	wrapCmd.Flags().StringVarP(&rootDir, "root", "r", "", "Root process sandbox directory.")
 	wrapCmd.Flags().StringVarP(&sid, "sid", "", tmux.NewSID(), "Override session identifier.")
+	wrapCmd.Flags().IntVarP(&execType, "exec-type", "t", int(pwrap.ExecTypeNormal), "Set executable type.")
 }

@@ -18,12 +18,16 @@
 package pwrap
 
 import (
+	"context"
+	"time"
+	"log"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/kim-company/pmux/tmux"
+	"github.com/kim-company/pmux/http/pwrapapi"
 )
 
 // PWrap is a process wrapper.
@@ -74,6 +78,7 @@ const (
 	FileStdout = "stdout"
 	FileConfig = "config"
 	FileSID    = "sid"
+	FileSock   = "io.sock"
 )
 
 // OverrideSID sets the sid option.
@@ -96,7 +101,7 @@ func RootDir(path string) func(*PWrap) error {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			return err
 		}
-		files := []string{FileStderr, FileStdout, FileConfig, FileSID}
+		files := []string{FileStderr, FileStdout, FileConfig, FileSID, FileSock}
 		for _, v := range files {
 			file := filepath.Join(dir, v)
 			if _, err := os.Stat(file); err == nil {
@@ -117,13 +122,25 @@ func RootDir(path string) func(*PWrap) error {
 }
 
 // Path returns the full path of the file as if it were inside "p"'s root
-// directory. Returns an error if the file is not present in the directory.
+// directory.
 func (p *PWrap) Path(rel string) (string, error) {
 	path := filepath.Join(p.WorkDir(), rel)
 	if _, err := os.Stat(path); err != nil {
 		return "", err
 	}
 	return path, nil
+}
+
+func (p *PWrap) paths(rels ...string) ([]string, error) {
+	acc := make([]string, len(rels))
+	for i, v := range rels {
+		path, err := p.Path(v)
+		if err != nil {
+			return acc, err
+		}
+		acc[i] = path
+	}
+	return acc, nil
 }
 
 // Open opens a file that must be present in "p"'s root directory. Returns an
@@ -134,6 +151,27 @@ func (p *PWrap) Open(rel string) (*os.File, error) {
 		return nil, err
 	}
 	return os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
+}
+
+func (p *PWrap) openMore(rels ...string) ([]*os.File, error) {
+	acc := make([]*os.File, len(rels))
+	for i, v := range rels {
+		f, err := p.Open(v)
+		if err != nil {
+			closeAll(acc)
+			return []*os.File{}, err
+		}
+		acc[i] = f
+	}
+	return acc, nil
+}
+
+func closeAll(files []*os.File) {
+	for _, v := range files {
+		if v != nil {
+			v.Close()
+		}
+	}
 }
 
 // StartSession starts the process wrapper in a tmux session. There is not guarantee that the process
@@ -173,28 +211,54 @@ func (p *PWrap) KillSession() error {
 	return nil
 }
 
+// ExecType defines which type of commands the executed child program will be able
+// to accept.
+type ExecType int
+
+const (
+	// Standard set of commands, i.e. no start or stop, the program will just
+	// execute its task and exit on its own.
+	ExecTypeNormal ExecType = iota
+	// The program will spawn and do nothing, waiting for another process to start
+	// terminate it.
+	ExecTypeLive
+)
+
 // Run executes "p"'s command and waits for it to exit. Its stderr and stdout pipes are
 // connected to their relative files inside process's root directory.
 // The underlying program is executed running `<ename> --config=<configuration file path>`.
-func (p *PWrap) Run() error {
-	stderr, err := p.Open(FileStderr)
+func (p *PWrap) Run(t ExecType) error {
+	files, err := p.openMore(FileStdout, FileStderr)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
 	}
-	defer stderr.Close()
-	stdout, err := p.Open(FileStdout)
+	defer closeAll(files)
+	
+	paths, err := p.paths(FileConfig, FileSock)
 	if err != nil {
-		return err
-	}
-	defer stdout.Close()
-	configPath, err := p.Path(FileConfig)
-	if err != nil {
-		return err
+		return fmt.Errorf("unable to run: failed retriving necessary paths: %w", err)
 	}
 
-	cmd := exec.Command(p.name, "--config="+configPath)
-	cmd.Stderr = stderr
-	cmd.Stdout = stdout
+	cmd := exec.Command(p.name, "--config="+paths[0], "--socket-path="+paths[1])
+	cmd.Stdout = files[0]
+	cmd.Stderr = files[1]
+
+	srv, err := pwrapapi.NewServer(p, t)
+	if err != nil {
+		return fmt.Errorf("unable to run: failed creating HTTP server: %w", err)
+	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			log.Printf("[ERROR] process wrapper server: %v", err)
+		}
+	}()
+
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
+
 	return cmd.Run()
 }
 
@@ -210,7 +274,7 @@ func (p *PWrap) Trash() error {
 }
 
 func (p *PWrap) trashFiles() error {
-	expected := []string{FileStderr, FileStdout, FileConfig, FileSID}
+	expected := []string{FileStderr, FileStdout, FileConfig, FileSID, FileSock}
 	found := 0
 	filepath.Walk(p.WorkDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
