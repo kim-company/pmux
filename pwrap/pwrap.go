@@ -19,15 +19,15 @@ package pwrap
 
 import (
 	"context"
-	"time"
-	"log"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
-	"github.com/kim-company/pmux/tmux"
 	"github.com/kim-company/pmux/http/pwrapapi"
+	"github.com/kim-company/pmux/tmux"
 )
 
 // PWrap is a process wrapper.
@@ -220,7 +220,7 @@ func (p *PWrap) Run(t pwrapapi.ExecType) error {
 		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
 	}
 	defer closeAll(files)
-	
+
 	paths, err := p.paths(FileConfig, FileSock)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed retriving necessary paths: %w", err)

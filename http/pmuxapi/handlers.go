@@ -118,4 +118,3 @@ func (h *SessionHandler) HandleDelete(keepFiles bool) http.HandlerFunc {
 		h.writeResponse(w, sid)
 	}
 }
-

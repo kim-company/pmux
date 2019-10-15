@@ -15,8 +15,8 @@
 package pwrapapi
 
 import (
-	"net/http"
 	"io"
+	"net/http"
 
 	"github.com/gorilla/mux"
 )
@@ -36,9 +36,9 @@ const (
 
 type Server struct {
 	*http.Server
-	execType ExecType
+	execType       ExecType
 	stderr, stdout io.Reader
-	sockPath string
+	sockPath       string
 }
 
 func Type(t ExecType) func(*Server) {
@@ -69,8 +69,8 @@ func NewServer(opts ...func(*Server)) *Server {
 	r := mux.NewRouter()
 	s := &Server{
 		Server: &http.Server{
-			Addr:         ":0",
-			Handler:      r,
+			Addr:    ":0",
+			Handler: r,
 		},
 	}
 	for _, f := range opts {
