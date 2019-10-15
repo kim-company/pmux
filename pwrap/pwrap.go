@@ -211,23 +211,10 @@ func (p *PWrap) KillSession() error {
 	return nil
 }
 
-// ExecType defines which type of commands the executed child program will be able
-// to accept.
-type ExecType int
-
-const (
-	// Standard set of commands, i.e. no start or stop, the program will just
-	// execute its task and exit on its own.
-	ExecTypeNormal ExecType = iota
-	// The program will spawn and do nothing, waiting for another process to start
-	// terminate it.
-	ExecTypeLive
-)
-
 // Run executes "p"'s command and waits for it to exit. Its stderr and stdout pipes are
 // connected to their relative files inside process's root directory.
 // The underlying program is executed running `<ename> --config=<configuration file path>`.
-func (p *PWrap) Run(t ExecType) error {
+func (p *PWrap) Run(t pwrapapi.ExecType) error {
 	files, err := p.openMore(FileStdout, FileStderr)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
@@ -243,10 +230,12 @@ func (p *PWrap) Run(t ExecType) error {
 	cmd.Stdout = files[0]
 	cmd.Stderr = files[1]
 
-	srv, err := pwrapapi.NewServer(p, t)
-	if err != nil {
-		return fmt.Errorf("unable to run: failed creating HTTP server: %w", err)
-	}
+	srv := pwrapapi.NewServer(
+		pwrapapi.Type(t),
+		pwrapapi.Stdout(files[0]),
+		pwrapapi.Stderr(files[1]),
+		pwrapapi.SockPath(paths[1]),
+	)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			log.Printf("[ERROR] process wrapper server: %v", err)

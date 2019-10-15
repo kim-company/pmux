@@ -18,6 +18,7 @@ import (
 	"log"
 
 	"github.com/kim-company/pmux/pwrap"
+	"github.com/kim-company/pmux/http/pwrapapi"
 	"github.com/kim-company/pmux/tmux"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,7 @@ var wrapCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		t := pwrap.ExecType(execType)
+		t := pwrapapi.ExecType(execType)
 		if err := pw.Run(t); err != nil {
 			log.Fatal(err)
 		}
@@ -51,5 +52,5 @@ func init() {
 	rootCmd.AddCommand(wrapCmd)
 	wrapCmd.Flags().StringVarP(&rootDir, "root", "r", "", "Root process sandbox directory.")
 	wrapCmd.Flags().StringVarP(&sid, "sid", "", tmux.NewSID(), "Override session identifier.")
-	wrapCmd.Flags().IntVarP(&execType, "exec-type", "t", int(pwrap.ExecTypeNormal), "Set executable type.")
+	wrapCmd.Flags().IntVarP(&execType, "exec-type", "t", int(pwrapapi.ExecTypeNormal), "Set executable type.")
 }
