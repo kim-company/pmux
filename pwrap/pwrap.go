@@ -19,8 +19,9 @@ package pwrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,6 +36,7 @@ type PWrap struct {
 	rootDir string
 	sid     string
 	name    string
+	mode    pwrapapi.ServerMode
 }
 
 // SID returns the assigned session identifier.
@@ -47,20 +49,6 @@ func (p *PWrap) WorkDir() string {
 	return filepath.Join(p.rootDir, p.sid)
 }
 
-// New is used to instantiate new PWrap instances.
-func New(opts ...func(*PWrap) error) (*PWrap, error) {
-	// Assign executable name and session identifer.
-	pw := &PWrap{sid: tmux.NewSID()}
-
-	for _, f := range opts {
-		if err := f(pw); err != nil {
-			return nil, fmt.Errorf("unable to apply option on process wrapper initialization: %w", err)
-		}
-	}
-
-	return pw, nil
-}
-
 // ExecName sets and checks the executable name option.
 func ExecName(n string) func(*PWrap) error {
 	return func(p *PWrap) error {
@@ -69,6 +57,14 @@ func ExecName(n string) func(*PWrap) error {
 			return err
 		}
 		p.name = n
+		return nil
+	}
+}
+
+// Mode sets the mode option.
+func Mode(m pwrapapi.ServerMode) func(*PWrap) error {
+	return func(p *PWrap) error {
+		p.mode = m
 		return nil
 	}
 }
@@ -119,6 +115,20 @@ func RootDir(path string) func(*PWrap) error {
 		}
 		return nil
 	}
+}
+
+// New is used to instantiate new PWrap instances.
+func New(opts ...func(*PWrap) error) (*PWrap, error) {
+	// Assign executable name and session identifer.
+	pw := &PWrap{sid: tmux.NewSID()}
+
+	for _, f := range opts {
+		if err := f(pw); err != nil {
+			return nil, fmt.Errorf("unable to apply option on process wrapper initialization: %w", err)
+		}
+	}
+
+	return pw, nil
 }
 
 // Path returns the full path of the file as if it were inside "p"'s root
@@ -192,7 +202,7 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
-	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--root="+p.rootDir, "--sid="+sid); err != nil {
+	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--root="+p.rootDir, "--sid="+sid, fmt.Sprintf("--mode=%d", int(p.mode))); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 
@@ -214,7 +224,7 @@ func (p *PWrap) KillSession() error {
 // Run executes "p"'s command and waits for it to exit. Its stderr and stdout pipes are
 // connected to their relative files inside process's root directory.
 // The underlying program is executed running `<ename> --config=<configuration file path>`.
-func (p *PWrap) Run(t pwrapapi.ExecType) error {
+func (p *PWrap) Run() error {
 	files, err := p.openMore(FileStdout, FileStderr)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
@@ -226,29 +236,60 @@ func (p *PWrap) Run(t pwrapapi.ExecType) error {
 		return fmt.Errorf("unable to run: failed retriving necessary paths: %w", err)
 	}
 
-	cmd := exec.Command(p.name, "--config="+paths[0], "--socket-path="+paths[1])
+	// What we want to accomplish is that if either the API or
+	// the tool exit, the other does too.
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, p.name, "--config="+paths[0], "--socket-path="+paths[1])
 	cmd.Stdout = files[0]
 	cmd.Stderr = files[1]
 
 	srv := pwrapapi.NewServer(
-		pwrapapi.Type(t),
-		pwrapapi.Stdout(files[0]),
-		pwrapapi.Stderr(files[1]),
-		pwrapapi.SockPath(paths[1]),
+		pwrapapi.Mode(p.mode),
+		pwrapapi.ChildStdout(files[0]),
+		pwrapapi.ChildStderr(files[1]),
+		pwrapapi.ChildSockPath(paths[1]),
 	)
+	errc := make(chan error, 1)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			log.Printf("[ERROR] process wrapper server: %v", err)
+		err := srv.ListenAndServe()
+		if err != nil && errors.Is(err, http.ErrServerClosed) {
+			// server was closed, i.e. the Run() command exited.
+			errc <- nil
+			return
 		}
+		if err != nil {
+			// server exited with a critical error
+			cancel()
+			errc <- err
+		}
+		errc <- nil
 	}()
 
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		srv.Shutdown(ctx)
-	}()
+	err = cmd.Run()
+	if err != nil && errors.Is(err, context.Canceled) {
+		// It was the server that exited with a critical error
+		// apparently.
+		if srvErr := <-errc; srvErr != nil {
+			return fmt.Errorf("run exited due to a process wrapper API server error: %w", err)
+		}
+		return fmt.Errorf("run exited with an unexpected error: %w", err)
+	}
 
-	return cmd.Run()
+	// Command exited and the server is still running (teoretically). Shutdown
+	// the server before inspecting the error.
+
+	ctx, cancel = context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
+	<-errc
+
+	if err != nil {
+		return fmt.Errorf("run exited with error: %w", err)
+	}
+	return nil
 }
 
 // Trash removes any traces of the process from the system. It even kills the session if any

@@ -24,24 +24,29 @@ import (
 	"time"
 
 	"github.com/kim-company/pmux/http/pmuxapi"
+	"github.com/kim-company/pmux/http/pwrapapi"
 	"github.com/spf13/cobra"
 )
 
-var execName string
 var port int
+var execName string
+var normalMode, liveMode bool
+var mode pwrapapi.ServerMode
 
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	PreRun: func(cmd *cobra.Command, args []string) {
+		if normalMode {
+			mode = pwrapapi.ModeNormal
+		}
+		if liveMode {
+			mode = pwrapapi.ModeLive
+		}
+	},
 	Run: func(cmd *cobra.Command, args []string) {
-		r := pmuxapi.NewRouter(execName, pmuxapi.KeepFiles(true))
+		r := pmuxapi.NewRouter(execName, mode, pmuxapi.KeepFiles(true))
 		srv := &http.Server{
 			Addr:         fmt.Sprintf("0.0.0.0:%d", port),
 			WriteTimeout: time.Second * 15,
@@ -98,4 +103,6 @@ func init() {
 func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 4002, "Server listening port.")
 	serverCmd.Flags().StringVarP(&execName, "exec-name", "n", "yes", "Pmux will spawn sessions running this executable")
+	serverCmd.Flags().BoolVarP(&normalMode, "normal", "", false, "Set server mode of spawned child server to normal")
+	serverCmd.Flags().BoolVarP(&liveMode, "live", "", false, "Set server mode of spawned child server to live. If also the normal flag is present, live mode will be used discarding the other value.")
 }

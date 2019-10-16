@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 
 	"github.com/gorilla/mux"
+	"github.com/kim-company/pmux/http/pwrapapi"
 	"github.com/kim-company/pmux/pwrap"
 	"github.com/kim-company/pmux/tmux"
 )
@@ -58,7 +59,7 @@ func (h *SessionHandler) HandleList() http.HandlerFunc {
 
 var rootDir = filepath.Join(os.TempDir(), "pmux", "sessionsd")
 
-func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
+func (h *SessionHandler) HandleCreate(execName string, mode pwrapapi.ServerMode) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 

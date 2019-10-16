@@ -20,12 +20,14 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/kim-company/pmux/http/pwrapapi"
 )
 
 type Router struct {
 	*mux.Router
 	keepFiles bool
 	execName  string
+	mode      pwrapapi.ServerMode
 }
 
 func KeepFiles(ok bool) func(*Router) {
@@ -36,7 +38,7 @@ func KeepFiles(ok bool) func(*Router) {
 
 // NewRouter returns a new ``Router'' instance which satisfies the ``http.Handler''
 // interface.
-func NewRouter(execName string, opts ...func(*Router)) *Router {
+func NewRouter(execName string, mode pwrapapi.ServerMode, opts ...func(*Router)) *Router {
 	r := &Router{Router: mux.NewRouter()}
 
 	r.Use(loggingMiddleware)
@@ -52,7 +54,7 @@ func NewRouter(execName string, opts ...func(*Router)) *Router {
 	h := &SessionHandler{}
 	v1 := r.PathPrefix("/api/v1").Subrouter()
 	v1.HandleFunc("/sessions", h.HandleList()).Methods("GET")
-	v1.HandleFunc("/sessions", h.HandleCreate(execName)).Methods("POST")
+	v1.HandleFunc("/sessions", h.HandleCreate(execName, mode)).Methods("POST")
 	v1.HandleFunc("/sessions/{sid}", h.HandleDelete(r.keepFiles)).Methods("DELETE")
 
 	return r

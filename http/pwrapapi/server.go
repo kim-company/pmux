@@ -15,66 +15,91 @@
 package pwrapapi
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/gorilla/mux"
 )
 
-// ExecType defines which type of commands the executed child program will be able
+// ServerMode defines which type of commands the executed child program will be able
 // to accept.
-type ExecType int
+type ServerMode int
 
 const (
-	// Standard set of commands, i.e. no start or stop, the program will just
+	// Standard set of commands, i.e. no start or stop, the child cmd will just
 	// execute its task and exit on its own.
-	ExecTypeNormal ExecType = iota
+	ModeNormal ServerMode = iota
 	// The program will spawn and do nothing, waiting for another process to start
 	// terminate it.
-	ExecTypeLive
+	ModeLive
 )
 
-type Server struct {
-	*http.Server
-	execType       ExecType
+type cmdSettings struct {
 	stderr, stdout io.Reader
 	sockPath       string
 }
 
-func Type(t ExecType) func(*Server) {
+// Server is an http.Server implementation which allows to interact with a local
+// process through HTTP.
+// Each server instance holds exactly one child process.
+type Server struct {
+	*http.Server
+	port  int
+	mode  ServerMode
+	child cmdSettings
+}
+
+// Mode sets the mode option.
+func Mode(m ServerMode) func(*Server) {
 	return func(s *Server) {
-		s.execType = t
+		s.mode = m
 	}
 }
 
-func Stderr(r io.Reader) func(*Server) {
+// ChildStderr sets the child stderr option.
+func ChildStderr(r io.Reader) func(*Server) {
 	return func(s *Server) {
-		s.stderr = r
+		s.child.stderr = r
 	}
 }
 
-func Stdout(r io.Reader) func(*Server) {
+// ChildStdout sets the child stdout option.
+func ChildStdout(r io.Reader) func(*Server) {
 	return func(s *Server) {
-		s.stdout = r
+		s.child.stdout = r
 	}
 }
 
-func SockPath(p string) func(*Server) {
+// ChildSockPath sets the child sock path option.
+func ChildSockPath(p string) func(*Server) {
 	return func(s *Server) {
-		s.sockPath = p
+		s.child.sockPath = p
 	}
 }
 
+// Port sets server's listening port option.
+func Port(p int) func(*Server) {
+	return func(s *Server) {
+		s.port = p
+	}
+}
+
+// NewServer creates a new Server instance.
 func NewServer(opts ...func(*Server)) *Server {
 	r := mux.NewRouter()
-	s := &Server{
-		Server: &http.Server{
-			Addr:    ":0",
-			Handler: r,
-		},
-	}
+	s := &Server{child: cmdSettings{}}
 	for _, f := range opts {
 		f(s)
 	}
+	s.Server = &http.Server{
+		Addr:    fmt.Sprintf(":%d", s.port),
+		Handler: r,
+	}
 	return s
+}
+
+func (s *Server) ListenAndServe() error {
+	// TODO: register with remote master
+	return s.Server.ListenAndServe()
 }
