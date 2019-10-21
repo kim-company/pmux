@@ -12,48 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pmuxapi
+package pwrapapi
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 )
 
-type Router struct {
+type cmdSettings struct {
+	stderr, stdout io.Reader
+	sockPath       string
+}
+
+type router struct {
 	*mux.Router
-	keepFiles bool
-	execName  string
+	*cmdSettings
 }
 
-func KeepFiles(ok bool) func(*Router) {
-	return func(r *Router) {
-		r.keepFiles = ok
-	}
-}
-
-// NewRouter returns a new ``Router'' instance which satisfies the ``http.Handler''
+// newRouter returns a new ``router'' instance which satisfies the ``http.Handler''
 // interface.
-func NewRouter(execName string, opts ...func(*Router)) *Router {
-	r := &Router{Router: mux.NewRouter()}
+func newRouter(s *cmdSettings) *router {
+	r := &router{
+		Router:      mux.NewRouter(),
+		cmdSettings: s,
+	}
 
 	r.Use(loggingMiddleware)
 	r.HandleFunc("/health_check", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Online!")
 	}).Methods("GET")
-
-	// Apply options on router.
-	for _, f := range opts {
-		f(r)
-	}
-
-	h := &SessionHandler{}
-	v1 := r.PathPrefix("/api/v1").Subrouter()
-	v1.HandleFunc("/sessions", h.HandleList()).Methods("GET")
-	v1.HandleFunc("/sessions", h.HandleCreate(execName)).Methods("POST")
-	v1.HandleFunc("/sessions/{sid}", h.HandleDelete(r.keepFiles)).Methods("DELETE")
 
 	return r
 }

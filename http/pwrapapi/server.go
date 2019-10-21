@@ -18,27 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
-
-// ServerMode defines which type of commands the executed child program will be able
-// to accept.
-type ServerMode int
-
-const (
-	// Standard set of commands, i.e. no start or stop, the child cmd will just
-	// execute its task and exit on its own.
-	ModeNormal ServerMode = iota
-	// The program will spawn and do nothing, waiting for another process to start
-	// terminate it.
-	ModeLive
-)
-
-type cmdSettings struct {
-	stderr, stdout io.Reader
-	sockPath       string
-}
 
 // Server is an http.Server implementation which allows to interact with a local
 // process through HTTP.
@@ -46,15 +26,7 @@ type cmdSettings struct {
 type Server struct {
 	*http.Server
 	port  int
-	mode  ServerMode
-	child cmdSettings
-}
-
-// Mode sets the mode option.
-func Mode(m ServerMode) func(*Server) {
-	return func(s *Server) {
-		s.mode = m
-	}
+	child *cmdSettings
 }
 
 // ChildStderr sets the child stderr option.
@@ -87,19 +59,14 @@ func Port(p int) func(*Server) {
 
 // NewServer creates a new Server instance.
 func NewServer(opts ...func(*Server)) *Server {
-	r := mux.NewRouter()
-	s := &Server{child: cmdSettings{}}
+	s := &Server{child: &cmdSettings{}}
 	for _, f := range opts {
 		f(s)
 	}
+	r := newRouter(s.child)
 	s.Server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.port),
 		Handler: r,
 	}
 	return s
-}
-
-func (s *Server) ListenAndServe() error {
-	// TODO: register with remote master
-	return s.Server.ListenAndServe()
 }

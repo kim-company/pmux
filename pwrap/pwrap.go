@@ -18,9 +18,14 @@
 package pwrap
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -29,6 +34,7 @@ import (
 
 	"github.com/kim-company/pmux/http/pwrapapi"
 	"github.com/kim-company/pmux/tmux"
+	"github.com/phayes/freeport"
 )
 
 // PWrap is a process wrapper.
@@ -36,7 +42,7 @@ type PWrap struct {
 	rootDir string
 	sid     string
 	name    string
-	mode    pwrapapi.ServerMode
+	regURL  string
 }
 
 // SID returns the assigned session identifier.
@@ -61,10 +67,10 @@ func ExecName(n string) func(*PWrap) error {
 	}
 }
 
-// Mode sets the mode option.
-func Mode(m pwrapapi.ServerMode) func(*PWrap) error {
+// Register sets the register url option.
+func Register(url string) func(*PWrap) error {
 	return func(p *PWrap) error {
-		p.mode = m
+		p.regURL = url
 		return nil
 	}
 }
@@ -155,18 +161,18 @@ func (p *PWrap) paths(rels ...string) ([]string, error) {
 
 // Open opens a file that must be present in "p"'s root directory. Returns an
 // error otherwise. It is caller's responsibility to close the file.
-func (p *PWrap) Open(rel string) (*os.File, error) {
+func (p *PWrap) Open(rel string, flag int) (*os.File, error) {
 	path, err := p.Path(rel)
 	if err != nil {
 		return nil, err
 	}
-	return os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
+	return os.OpenFile(path, flag, 0755)
 }
 
-func (p *PWrap) openMore(rels ...string) ([]*os.File, error) {
+func (p *PWrap) openMore(flag int, rels ...string) ([]*os.File, error) {
 	acc := make([]*os.File, len(rels))
 	for i, v := range rels {
-		f, err := p.Open(v)
+		f, err := p.Open(v, flag)
 		if err != nil {
 			closeAll(acc)
 			return []*os.File{}, err
@@ -193,7 +199,7 @@ func (p *PWrap) StartSession() (string, error) {
 		return "", fmt.Errorf("could not start process wrapper session: session identifier not set")
 	}
 
-	f, err := p.Open(FileSID)
+	f, err := p.Open(FileSID, os.O_RDWR|os.O_CREATE)
 	if err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
@@ -202,7 +208,7 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
-	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--root="+p.rootDir, "--sid="+sid, fmt.Sprintf("--mode=%d", int(p.mode))); err != nil {
+	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--r="+p.rootDir, "--sid="+sid, "--reg-url="+p.regURL); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 
@@ -221,11 +227,62 @@ func (p *PWrap) KillSession() error {
 	return nil
 }
 
+// Register performs an HTTP POST request to `regURL`, if present. It registers "port" with the
+// remote handler, and returnes a nil error only if the response's status is 200.
+func (p *PWrap) Register(port int) error {
+	if p.regURL == "" {
+		log.Printf("[WARN] registration URL not set")
+		return nil
+	}
+
+	buf := bytes.Buffer{}
+	if err := json.NewEncoder(&buf).Encode(&struct {
+		Port int `json:"port"`
+	}{
+		Port: port,
+	}); err != nil {
+		return fmt.Errorf("error while building registration payload: %w", err)
+	}
+	resp, err := http.Post(p.regURL, "application/json", &buf)
+	if err != nil {
+		return fmt.Errorf("registration error: %w", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(ioutil.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("registration failed: status code returned is: %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Run executes "p"'s command and waits for it to exit. Its stderr and stdout pipes are
 // connected to their relative files inside process's root directory.
 // The underlying program is executed running `<ename> --config=<configuration file path>`.
+// If an error occurs, is is both returned and written into wrapper's stderr, if possible.
 func (p *PWrap) Run() error {
-	files, err := p.openMore(FileStdout, FileStderr)
+	if err := p.run(); err != nil {
+		f, ferr := p.Open(FileStderr, os.O_APPEND|os.O_CREATE|os.O_WRONLY)
+		if ferr != nil {
+			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
+		}
+		if _, werr := f.Write([]byte(err.Error() + "\n")); werr != nil {
+			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
+		}
+		return err
+	}
+	return nil
+}
+
+func (p *PWrap) run() error {
+	port, err := freeport.GetFreePort()
+	if err != nil {
+		return fmt.Errorf("unable to run: failed getting free port: %w", err)
+	}
+	if err = p.Register(port); err != nil {
+		return fmt.Errorf("unable to run: %w", err)
+	}
+
+	files, err := p.openMore(os.O_APPEND|os.O_CREATE|os.O_WRONLY, FileStdout, FileStderr)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
 	}
@@ -247,7 +304,7 @@ func (p *PWrap) Run() error {
 	cmd.Stderr = files[1]
 
 	srv := pwrapapi.NewServer(
-		pwrapapi.Mode(p.mode),
+		pwrapapi.Port(port),
 		pwrapapi.ChildStdout(files[0]),
 		pwrapapi.ChildStderr(files[1]),
 		pwrapapi.ChildSockPath(paths[1]),
