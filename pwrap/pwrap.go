@@ -288,7 +288,7 @@ func (p *PWrap) run() error {
 	}
 	defer closeAll(files)
 
-	paths, err := p.paths(FileConfig, FileSock)
+	paths, err := p.paths(FileConfig, FileSock, FileStdout, FileStderr)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed retriving necessary paths: %w", err)
 	}
@@ -305,9 +305,9 @@ func (p *PWrap) run() error {
 
 	srv := pwrapapi.NewServer(
 		pwrapapi.Port(port),
-		pwrapapi.ChildStdout(files[0]),
-		pwrapapi.ChildStderr(files[1]),
-		pwrapapi.ChildSockPath(paths[1]),
+		pwrapapi.CmdStdoutPath(paths[2]),
+		pwrapapi.CmdStderrPath(paths[3]),
+		pwrapapi.CmdSockPath(paths[1]),
 	)
 	errc := make(chan error, 1)
 	go func() {

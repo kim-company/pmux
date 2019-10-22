@@ -16,37 +16,34 @@ package pwrapapi
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 )
 
 // Server is an http.Server implementation which allows to interact with a local
 // process through HTTP.
-// Each server instance holds exactly one child process.
+// Each server tracks only one child cmd.
 type Server struct {
 	*http.Server
-	port  int
-	child *cmdSettings
+	port int
+	r    *Router
 }
 
-// ChildStderr sets the child stderr option.
-func ChildStderr(r io.Reader) func(*Server) {
+func CmdStderrPath(path string) func(*Server) {
 	return func(s *Server) {
-		s.child.stderr = r
+		RouteStderr(path)(s.r)
 	}
 }
 
-// ChildStdout sets the child stdout option.
-func ChildStdout(r io.Reader) func(*Server) {
+func CmdStdoutPath(path string) func(*Server) {
 	return func(s *Server) {
-		s.child.stdout = r
+		RouteStdout(path)(s.r)
 	}
 }
 
-// ChildSockPath sets the child sock path option.
-func ChildSockPath(p string) func(*Server) {
+func CmdSockPath(path string) func(*Server) {
 	return func(s *Server) {
-		s.child.sockPath = p
+		RouteProgress(path)(s.r)
+		// TODO: Add also command route to deliver commands.
 	}
 }
 
@@ -59,14 +56,15 @@ func Port(p int) func(*Server) {
 
 // NewServer creates a new Server instance.
 func NewServer(opts ...func(*Server)) *Server {
-	s := &Server{child: &cmdSettings{}}
+	r := NewRouter()
+	s := &Server{r: r}
 	for _, f := range opts {
 		f(s)
 	}
-	r := newRouter(s.child)
+
 	s.Server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.port),
-		Handler: r,
+		Handler: s.r,
 	}
 	return s
 }
