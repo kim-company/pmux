@@ -23,7 +23,7 @@ import (
 
 var (
 	configPath string
-	sockPath string
+	sockPath   string
 )
 
 // MockcmdCmd represents the mockcmd command
@@ -31,9 +31,9 @@ var MockcmdCmd = &cobra.Command{
 	Use:   "mockcmd",
 	Short: "A default mocked command which can be executed by pmux, but does not do anything useful.",
 	Run: func(cmd *cobra.Command, args []string) {
-		for i := 0;; i++ {
+		for i := 0; ; i++ {
 			fmt.Printf("waiting %d...", i)
-			<-time.After(time.Millisecond*1000)
+			<-time.After(time.Millisecond * 1000)
 			fmt.Printf("done!\n")
 		}
 	},

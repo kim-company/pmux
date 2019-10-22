@@ -130,5 +130,10 @@ func hijackCopy(w http.ResponseWriter, src io.Reader, contentType string) {
 	defer conn.Close()
 	defer cw.Close()
 
-	io.Copy(cw, src)
+	n, err := io.Copy(cw, src)
+	if err != nil {
+		writeError(w, fmt.Errorf("unable to complete copy: %w", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[INFO] copy: #%d bytes transferred", n)
 }
