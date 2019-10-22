@@ -37,7 +37,8 @@ func TestNew(t *testing.T) {
 	pathStdout := filepath.Join(path, FileStdout)
 	pathConfig := filepath.Join(path, FileConfig)
 	pathSID := filepath.Join(path, FileSID)
-	paths := []string{pathStderr, pathStdout, pathConfig, pathSID}
+	pathSock := filepath.Join(path, FileSock)
+	paths := []string{pathStderr, pathStdout, pathConfig, pathSID, pathSock}
 	for _, v := range paths {
 		if _, err := os.Stat(v); err != nil {
 			t.Fatal(err)

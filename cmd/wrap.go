@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootDir, sid string
+var rootDir, sid, url string
 
 // wrapCmd represents the pwrap command
 var wrapCmd = &cobra.Command{
@@ -31,11 +31,16 @@ var wrapCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: errors are difficult to be detected if this process
-		// started from a `pwrap.Start()` call, as it means that we're running
+		// started from a `pwrap.StartSession()` call, as it means that we're running
 		// in a sandboxed tmux session.
 
 		name := args[0]
-		pw, err := pwrap.New(pwrap.ExecName(name), pwrap.OverrideSID(sid), pwrap.RootDir(rootDir))
+		pw, err := pwrap.New(
+			pwrap.ExecName(name),
+			pwrap.OverrideSID(sid),
+			pwrap.RootDir(rootDir),
+			pwrap.Register(url),
+		)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -49,4 +54,5 @@ func init() {
 	rootCmd.AddCommand(wrapCmd)
 	wrapCmd.Flags().StringVarP(&rootDir, "root", "r", "", "Root process sandbox directory.")
 	wrapCmd.Flags().StringVarP(&sid, "sid", "", tmux.NewSID(), "Override session identifier.")
+	wrapCmd.Flags().StringVarP(&url, "reg-url", "", "", "Set registration URL to contact before running the task.")
 }

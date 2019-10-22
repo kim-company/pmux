@@ -5,10 +5,12 @@ VERSION_FLAGS    := -ldflags='-X "main.version=$(VERSION)" -X "main.commit=$(COM
 
 export GO111MODULE=on
 
-.PHONY: all pmux
-all: pmux
-pmux:
-	go build -o bin/pmux $(VERSION_FLAGS)
+.PHONY: all pmux mockcmd
+all: pmux mockcmd
+pmux: main.go
+	go build -o bin/pmux $(VERSION_FLAGS) main.go
+mockcmd: mockcmd.go
+	go build -o bin/mockcmd mockcmd.go
 test:
 	go test ./...
 format:

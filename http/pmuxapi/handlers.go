@@ -17,7 +17,6 @@ package pmuxapi
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -61,20 +60,28 @@ var rootDir = filepath.Join(os.TempDir(), "pmux", "sessionsd")
 func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
+		var c struct {
+			URL    string      `json:"register_url"`
+			Config interface{} `json:"config"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+			h.writeError(w, fmt.Errorf("unable to decode create payload body: %w", err), http.StatusInternalServerError)
+			return
+		}
 
-		pw, err := pwrap.New(pwrap.ExecName(execName), pwrap.RootDir(rootDir))
+		pw, err := pwrap.New(pwrap.ExecName(execName), pwrap.RootDir(rootDir), pwrap.Register(c.URL))
 		if err != nil {
 			h.writeError(w, err, http.StatusInternalServerError)
 			return
 		}
-		configFile, err := pw.Open(pwrap.FileConfig)
+		configFile, err := pw.Open(pwrap.FileConfig, os.O_RDWR|os.O_CREATE)
 		if err != nil {
 			h.writeError(w, err, http.StatusInternalServerError)
 			pw.Trash()
 			return
 		}
 		defer configFile.Close()
-		if _, err = io.Copy(configFile, r.Body); err != nil {
+		if err := json.NewEncoder(configFile).Encode(c.Config); err != nil {
 			h.writeError(w, fmt.Errorf("unable to store configuration: %w", err), http.StatusInternalServerError)
 			pw.Trash()
 			return
