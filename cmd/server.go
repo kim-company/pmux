@@ -91,5 +91,5 @@ func init() {
 
 func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 4002, "Server listening port.")
-	serverCmd.Flags().StringVarP(&execName, "exec-name", "n", "yes", "Pmux will spawn sessions running this executable")
+	serverCmd.Flags().StringVarP(&execName, "exec-name", "n", "bin/mockcmd", "Pmux will spawn sessions running this executable")
 }

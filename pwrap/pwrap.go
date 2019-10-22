@@ -230,6 +230,7 @@ func (p *PWrap) KillSession() error {
 // Register performs an HTTP POST request to `regURL`, if present. It registers "port" with the
 // remote handler, and returnes a nil error only if the response's status is 200.
 func (p *PWrap) Register(port int) error {
+	log.Printf("[INFO] registering port %d for wrapper %s", port, p.sid)
 	if p.regURL == "" {
 		log.Printf("[WARN] registration URL not set")
 		return nil
@@ -266,7 +267,7 @@ func (p *PWrap) Run() error {
 			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
 		}
 		if _, werr := f.Write([]byte(err.Error() + "\n")); werr != nil {
-			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
+			return fmt.Errorf("unable to write run error %w, which is: %w", werr, err)
 		}
 		return err
 	}
