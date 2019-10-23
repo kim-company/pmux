@@ -80,7 +80,6 @@ const (
 	FileStdout = "stdout"
 	FileConfig = "config"
 	FileSID    = "sid"
-	FileSock   = "io.sock"
 )
 
 // OverrideSID sets the sid option.
@@ -103,7 +102,7 @@ func RootDir(path string) func(*PWrap) error {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			return err
 		}
-		files := []string{FileStderr, FileStdout, FileConfig, FileSID, FileSock}
+		files := []string{FileStderr, FileStdout, FileConfig, FileSID}
 		for _, v := range files {
 			file := filepath.Join(dir, v)
 			if _, err := os.Stat(file); err == nil {
@@ -139,34 +138,30 @@ func New(opts ...func(*PWrap) error) (*PWrap, error) {
 
 // Path returns the full path of the file as if it were inside "p"'s root
 // directory.
-func (p *PWrap) Path(rel string) (string, error) {
-	path := filepath.Join(p.WorkDir(), rel)
-	if _, err := os.Stat(path); err != nil {
-		return "", err
-	}
-	return path, nil
+func (p *PWrap) Path(rel string) string {
+	return filepath.Join(p.WorkDir(), rel)
 }
 
-func (p *PWrap) paths(rels ...string) ([]string, error) {
+// SockPath returns a suitable socket address path for this session. It does not use the
+// working directory as in some systems the socket path cannot be longer than "n" chars.
+// Another reason is that this file is not actually a file that should be managed by the wrapper but
+// by the child command itself.
+func (p *PWrap) SockPath() string {
+	return filepath.Join(os.TempDir(), p.sid+".sock")
+}
+
+func (p *PWrap) paths(rels ...string) []string {
 	acc := make([]string, len(rels))
 	for i, v := range rels {
-		path, err := p.Path(v)
-		if err != nil {
-			return acc, err
-		}
-		acc[i] = path
+		acc[i] = p.Path(v)
 	}
-	return acc, nil
+	return acc
 }
 
 // Open opens a file that must be present in "p"'s root directory. Returns an
 // error otherwise. It is caller's responsibility to close the file.
 func (p *PWrap) Open(rel string, flag int, mode os.FileMode) (*os.File, error) {
-	path, err := p.Path(rel)
-	if err != nil {
-		return nil, err
-	}
-	return os.OpenFile(path, flag, mode)
+	return os.OpenFile(p.Path(rel), flag, mode)
 }
 
 func (p *PWrap) openMore(flag int, mode os.FileMode, rels ...string) ([]*os.File, error) {
@@ -208,7 +203,7 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
-	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--r="+p.rootDir, "--sid="+sid, "--reg-url="+p.regURL); err != nil {
+	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--root="+p.rootDir, "--sid="+sid, "--reg-url="+p.regURL); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 
@@ -260,8 +255,9 @@ func (p *PWrap) Register(port int) error {
 // connected to their relative files inside process's root directory.
 // The underlying program is executed running `<ename> --config=<configuration file path>`.
 // If an error occurs, is is both returned and written into wrapper's stderr, if possible.
-func (p *PWrap) Run() error {
-	if err := p.run(); err != nil {
+func (p *PWrap) Run(ctx context.Context) error {
+	if err := p.run(ctx); err != nil {
+		log.Printf("[ERROR] run exited: %v", err)
 		f, ferr := p.Open(FileStderr, os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm)
 		if ferr != nil {
 			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
@@ -274,7 +270,7 @@ func (p *PWrap) Run() error {
 	return nil
 }
 
-func (p *PWrap) run() error {
+func (p *PWrap) run(ctx context.Context) error {
 	port, err := freeport.GetFreePort()
 	if err != nil {
 		return fmt.Errorf("unable to run: failed getting free port: %w", err)
@@ -289,17 +285,15 @@ func (p *PWrap) run() error {
 	}
 	defer closeAll(files)
 
-	paths, err := p.paths(FileConfig, FileSock)
-	if err != nil {
-		return fmt.Errorf("unable to run: failed retriving necessary paths: %w", err)
-	}
+	paths := []string{p.Path(FileConfig), p.SockPath()}
 
 	// What we want to accomplish is that if either the API or
 	// the tool exit, the other does too.
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	log.Printf("[INFO] executing %s, config: %s, socket path: %s", p.name, paths[0], paths[1])
 	cmd := exec.CommandContext(ctx, p.name, "--config="+paths[0], "--socket-path="+paths[1])
 	cmd.Stdout = files[0]
 	cmd.Stderr = files[1]
@@ -357,7 +351,7 @@ func (p *PWrap) Trash() error {
 }
 
 func (p *PWrap) trashFiles() error {
-	expected := []string{FileStderr, FileStdout, FileConfig, FileSID, FileSock}
+	expected := []string{FileStderr, FileStdout, FileConfig, FileSID}
 	found := 0
 	filepath.Walk(p.WorkDir(), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -375,6 +369,7 @@ func (p *PWrap) trashFiles() error {
 	if found == len(expected)+1 /* 1 for the directory itself */ {
 		return os.RemoveAll(p.WorkDir())
 	}
+	os.Remove(p.SockPath())
 
 	return nil
 }
