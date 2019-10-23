@@ -37,8 +37,7 @@ func TestNew(t *testing.T) {
 	pathStdout := filepath.Join(path, FileStdout)
 	pathConfig := filepath.Join(path, FileConfig)
 	pathSID := filepath.Join(path, FileSID)
-	pathSock := filepath.Join(path, FileSock)
-	paths := []string{pathStderr, pathStdout, pathConfig, pathSID, pathSock}
+	paths := []string{pathStderr, pathStdout, pathConfig, pathSID}
 	for _, v := range paths {
 		if _, err := os.Stat(v); err != nil {
 			t.Fatal(err)
@@ -121,17 +120,15 @@ func TestPath(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(os.TempDir(), "pwrap-test")
-	pw, err := New(RootDir(path))
+	sid := "1234"
+	pw, err := New(OverrideSID(sid), RootDir(path))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	path, err = pw.Path(FileStderr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	path, err = pw.Path("invalid-file")
-	if err == nil {
-		t.Fatalf("Expected path error, found nil. Path returned: %v", path)
+	stderrPath := pw.Path(FileStderr)
+	expStderrPath := filepath.Join(path, sid, FileStderr)
+	if stderrPath != expStderrPath {
+		t.Fatalf("Wanted %v, found %v", expStderrPath, stderrPath)
 	}
 }
