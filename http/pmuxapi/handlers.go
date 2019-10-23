@@ -74,7 +74,7 @@ func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 			h.writeError(w, err, http.StatusInternalServerError)
 			return
 		}
-		configFile, err := pw.Open(pwrap.FileConfig, os.O_RDWR|os.O_CREATE)
+		configFile, err := pw.Open(pwrap.FileConfig, os.O_RDWR|os.O_CREATE, os.ModePerm)
 		if err != nil {
 			h.writeError(w, err, http.StatusInternalServerError)
 			pw.Trash()

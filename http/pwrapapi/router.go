@@ -21,25 +21,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"os"
 
 	"github.com/gorilla/mux"
 )
 
 type Router struct {
 	*mux.Router
-}
-
-func RouteStderr(path string) func(*Router) {
-	return func(r *Router) {
-		r.HandleFunc("/stderr", stderrStreamHandler(path)).Methods("GET")
-	}
-}
-
-func RouteStdout(path string) func(*Router) {
-	return func(r *Router) {
-		r.HandleFunc("/stdout", stdoutStreamHandler(path)).Methods("GET")
-	}
 }
 
 func RouteProgress(path string) func(*Router) {
@@ -70,40 +57,20 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func writeError(w http.ResponseWriter, err error, status int) {
-	log.Printf("[ERROR] [STATUS %d] %v", status, err)
+func serveError(w http.ResponseWriter, err error, status int) {
+	logError(err, status)
 	http.Error(w, err.Error(), status)
 }
 
-func stderrStreamHandler(stderrPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		f, err := os.Open(stderrPath)
-		if err != nil {
-			writeError(w, fmt.Errorf("unable to open stderr: %w", err), http.StatusInternalServerError)
-			return
-		}
-		defer f.Close()
-		hijackCopy(w, f, "text/plain")
-	}
-}
-
-func stdoutStreamHandler(stdoutPath string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		f, err := os.Open(stdoutPath)
-		if err != nil {
-			writeError(w, fmt.Errorf("unable to open stdout: %w", err), http.StatusInternalServerError)
-			return
-		}
-		defer f.Close()
-		hijackCopy(w, f, "text/plain")
-	}
+func logError(err error, status int) {
+	log.Printf("[ERROR] [STATUS %d] %v", status, err)
 }
 
 func progressStreamHandler(sockPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sock, err := net.Dial("unix", sockPath)
 		if err != nil {
-			writeError(w, fmt.Errorf("unable to open progress socket: %w", err), http.StatusInternalServerError)
+			serveError(w, fmt.Errorf("unable to open progress socket: %w", err), http.StatusInternalServerError)
 			return
 		}
 		defer sock.Close()
@@ -118,12 +85,12 @@ func hijackCopy(w http.ResponseWriter, src io.Reader, contentType string) {
 	// Hijack the connection for uninterrupted data stream delivery.
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		writeError(w, fmt.Errorf("webserver doesn't support hijacking"), http.StatusInternalServerError)
+		serveError(w, fmt.Errorf("webserver doesn't support hijacking"), http.StatusInternalServerError)
 		return
 	}
 	conn, _, err := hj.Hijack()
 	if err != nil {
-		writeError(w, fmt.Errorf("unable to hijack connection: %w", err), http.StatusInternalServerError)
+		serveError(w, fmt.Errorf("unable to hijack connection: %w", err), http.StatusInternalServerError)
 		return
 	}
 	cw := httputil.NewChunkedWriter(conn)
@@ -132,7 +99,7 @@ func hijackCopy(w http.ResponseWriter, src io.Reader, contentType string) {
 
 	n, err := io.Copy(cw, src)
 	if err != nil {
-		writeError(w, fmt.Errorf("unable to complete copy: %w", err), http.StatusInternalServerError)
+		logError(fmt.Errorf("unable to complete copy: %w", err), http.StatusInternalServerError)
 		return
 	}
 	log.Printf("[INFO] copy: #%d bytes transferred", n)

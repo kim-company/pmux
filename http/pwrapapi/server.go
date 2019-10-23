@@ -28,18 +28,6 @@ type Server struct {
 	r    *Router
 }
 
-func CmdStderrPath(path string) func(*Server) {
-	return func(s *Server) {
-		RouteStderr(path)(s.r)
-	}
-}
-
-func CmdStdoutPath(path string) func(*Server) {
-	return func(s *Server) {
-		RouteStdout(path)(s.r)
-	}
-}
-
 func CmdSockPath(path string) func(*Server) {
 	return func(s *Server) {
 		RouteProgress(path)(s.r)
