@@ -37,6 +37,9 @@ var MockcmdCmd = &cobra.Command{
 	Use:   "mockcmd",
 	Short: "A default mocked command which can be executed by pmux, but does not do anything useful.",
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Fprintf(os.Stderr, "mockcmd stderr\n")
+		fmt.Fprintf(os.Stdout, "mockcmd stdout\n")
+
 		var w io.WriteCloser = os.Stdout
 		if sockPath != "" {
 			ctx := context.Background()
