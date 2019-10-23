@@ -161,18 +161,18 @@ func (p *PWrap) paths(rels ...string) ([]string, error) {
 
 // Open opens a file that must be present in "p"'s root directory. Returns an
 // error otherwise. It is caller's responsibility to close the file.
-func (p *PWrap) Open(rel string, flag int) (*os.File, error) {
+func (p *PWrap) Open(rel string, flag int, mode os.FileMode) (*os.File, error) {
 	path, err := p.Path(rel)
 	if err != nil {
 		return nil, err
 	}
-	return os.OpenFile(path, flag, 0755)
+	return os.OpenFile(path, flag, mode)
 }
 
-func (p *PWrap) openMore(flag int, rels ...string) ([]*os.File, error) {
+func (p *PWrap) openMore(flag int, mode os.FileMode, rels ...string) ([]*os.File, error) {
 	acc := make([]*os.File, len(rels))
 	for i, v := range rels {
-		f, err := p.Open(v, flag)
+		f, err := p.Open(v, flag, mode)
 		if err != nil {
 			closeAll(acc)
 			return []*os.File{}, err
@@ -199,7 +199,7 @@ func (p *PWrap) StartSession() (string, error) {
 		return "", fmt.Errorf("could not start process wrapper session: session identifier not set")
 	}
 
-	f, err := p.Open(FileSID, os.O_RDWR|os.O_CREATE)
+	f, err := p.Open(FileSID, os.O_RDWR|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
@@ -262,7 +262,7 @@ func (p *PWrap) Register(port int) error {
 // If an error occurs, is is both returned and written into wrapper's stderr, if possible.
 func (p *PWrap) Run() error {
 	if err := p.run(); err != nil {
-		f, ferr := p.Open(FileStderr, os.O_APPEND|os.O_CREATE|os.O_WRONLY)
+		f, ferr := p.Open(FileStderr, os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm)
 		if ferr != nil {
 			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
 		}
@@ -283,13 +283,13 @@ func (p *PWrap) run() error {
 		return fmt.Errorf("unable to run: %w", err)
 	}
 
-	files, err := p.openMore(os.O_APPEND|os.O_CREATE|os.O_WRONLY, FileStdout, FileStderr)
+	files, err := p.openMore(os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm, FileStdout, FileStderr)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
 	}
 	defer closeAll(files)
 
-	paths, err := p.paths(FileConfig, FileSock, FileStdout, FileStderr)
+	paths, err := p.paths(FileConfig, FileSock)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed retriving necessary paths: %w", err)
 	}
@@ -304,12 +304,7 @@ func (p *PWrap) run() error {
 	cmd.Stdout = files[0]
 	cmd.Stderr = files[1]
 
-	srv := pwrapapi.NewServer(
-		pwrapapi.Port(port),
-		pwrapapi.CmdStdoutPath(paths[2]),
-		pwrapapi.CmdStderrPath(paths[3]),
-		pwrapapi.CmdSockPath(paths[1]),
-	)
+	srv := pwrapapi.NewServer(pwrapapi.Port(port), pwrapapi.CmdSockPath(paths[1]))
 	errc := make(chan error, 1)
 	go func() {
 		err := srv.ListenAndServe()
