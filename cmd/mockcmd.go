@@ -69,10 +69,6 @@ const defaultBufferCap = 4096
 // Listen starts a Unix Domain Socket listener on ``sockPath''.
 // Is is the caller's responsibility to close the listener when it's done.
 func listen(ctx context.Context, sockPath string) (net.Listener, error) {
-	if err := os.RemoveAll(sockPath); err != nil {
-		return nil, fmt.Errorf("unable to cleanup %v: %w", sockPath, err)
-	}
-
 	l, err := new(net.ListenConfig).Listen(ctx, "unix", sockPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to listen on %v: %w", sockPath, err)
