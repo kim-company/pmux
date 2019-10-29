@@ -15,8 +15,10 @@
 package pwrapapi
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -32,6 +34,7 @@ type Router struct {
 func RouteProgress(path string) func(*Router) {
 	return func(r *Router) {
 		r.HandleFunc("/progress", progressStreamHandler(path)).Methods("GET")
+		r.HandleFunc("/command", commandHandler(path)).Methods("POST")
 	}
 }
 
@@ -73,8 +76,38 @@ func progressStreamHandler(sockPath string) http.HandlerFunc {
 			serveError(w, fmt.Errorf("unable to open progress socket: %w", err), http.StatusInternalServerError)
 			return
 		}
+		header := []byte("mode=progress\n")
+		sock.Write(header)
 		defer sock.Close()
 		hijackCopy(w, sock, "text/csv")
+	}
+}
+
+func commandHandler(sockPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		sock, err := net.Dial("unix", sockPath)
+		if err != nil {
+			io.Copy(ioutil.Discard, r.Body)
+			serveError(w, fmt.Errorf("unable to open progress socket: %w", err), http.StatusInternalServerError)
+			return
+		}
+		defer sock.Close()
+
+		w.WriteHeader(http.StatusOK)
+		buf := bytes.NewBuffer([]byte("mode=command\n"))
+		_, err = io.Copy(buf, r.Body)
+		if err != nil {
+			logError(fmt.Errorf("unable to complete copy: %w", err), http.StatusInternalServerError)
+			return
+		}
+		buf.Write([]byte("\n"))
+		_, err = io.Copy(sock, buf)
+		if err != nil {
+			logError(fmt.Errorf("unable to complete copy: %w", err), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
