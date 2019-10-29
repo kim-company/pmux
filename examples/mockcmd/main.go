@@ -76,7 +76,7 @@ func interProcessCmdHandler(cancel context.CancelFunc) func(*pwrap.UnixCommBridg
 
 func init() {
 	mockCmd.Flags().StringVarP(&configPath, "config", "", "config.json", "Path to the configuration file.")
-	mockCmd.Flags().StringVarP(&sockPath, "socket-path", "", "io.sock", "Path to the communication socket address.")
+	mockCmd.Flags().StringVarP(&sockPath, "socket-path", "", "", "Path to the communication socket address.")
 }
 
 func main() {
