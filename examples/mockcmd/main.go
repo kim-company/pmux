@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
-	"sync"
+	"strings"
 	"time"
 
+	"github.com/kim-company/pmux/pwrap"
 	"github.com/spf13/cobra"
 )
 
@@ -37,26 +37,41 @@ var mockCmd = &cobra.Command{
 	Use:   "mockcmd",
 	Short: "A default mocked command which can be executed by pmux, but does not do anything useful.",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(os.Stderr, "mockcmd stderr\n")
-		fmt.Fprintf(os.Stdout, "mockcmd stdout\n")
-
 		var w io.WriteCloser = os.Stdout
+		ctx, cancel := context.WithCancel(context.Background())
 		if sockPath != "" {
-			ctx := context.Background()
-			l, err := listen(ctx, sockPath)
+			br, err := pwrap.NewUnixCommBridge(ctx, sockPath, interProcessCmdHandler(cancel))
 			if err != nil {
 				log.Printf("[ERROR] %v", err)
 				return
 			}
-			w = NewUpdatesWriter(ctx, l)
+			defer br.Close()
+			w = br
+			go br.Open(ctx)
 		}
 
 		for i := 0; ; i++ {
 			fmt.Fprintf(w, "waiting %d...", i)
-			<-time.After(time.Millisecond * 1000)
-			fmt.Fprintf(w, "done!\n")
+			select {
+			case <-time.After(time.Millisecond * 1000):
+				fmt.Fprintf(w, "done!\n")
+			case <-ctx.Done():
+				log.Printf("[INFO] exiting: %v", ctx.Err())
+				return
+			}
 		}
 	},
+}
+
+func interProcessCmdHandler(cancel context.CancelFunc) func(*pwrap.UnixCommBridge) {
+	return pwrap.OnCommand(func(u *pwrap.UnixCommBridge, cmd string) error {
+		log.Printf("[INFO] command received: %v", cmd)
+		if strings.Contains(cmd, "cancel") {
+			cancel()
+			return u.Close()
+		}
+		return nil
+	})
 }
 
 func init() {
@@ -64,123 +79,6 @@ func init() {
 	mockCmd.Flags().StringVarP(&sockPath, "socket-path", "", "io.sock", "Path to the communication socket address.")
 }
 
-const defaultBufferCap = 4096
-
-// Listen starts a Unix Domain Socket listener on ``sockPath''.
-// Is is the caller's responsibility to close the listener when it's done.
-func listen(ctx context.Context, sockPath string) (net.Listener, error) {
-	l, err := new(net.ListenConfig).Listen(ctx, "unix", sockPath)
-	if err != nil {
-		return nil, fmt.Errorf("unable to listen on %v: %w", sockPath, err)
-	}
-	return l, nil
-}
-
-func NewUpdatesWriter(ctx context.Context, l net.Listener) *UpdatesWriter {
-	uw := &UpdatesWriter{}
-	go uw.accept(ctx, l)
-	return uw
-}
-
-type UpdatesWriter struct {
-	last struct {
-		sync.Mutex
-		u *string
-	}
-	clients struct {
-		sync.Mutex
-		m map[string]chan string
-	}
-}
-
-func (w *UpdatesWriter) Write(p []byte) (int, error) {
-	if err := w.WriteUpdate(string(p)); err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-func (w *UpdatesWriter) Close() error {
-	return nil
-}
-
-func (w *UpdatesWriter) WriteUpdate(u string) error {
-	w.last.Lock()
-	w.last.u = &u
-	w.last.Unlock()
-
-	w.clients.Lock()
-	defer w.clients.Unlock()
-	for _, v := range w.clients.m {
-		v <- u
-	}
-	return nil
-}
-
-type rx struct {
-	close func()
-	c     <-chan string
-}
-
-func (w *UpdatesWriter) getTx() *rx {
-	tx := make(chan string, 1)
-
-	w.last.Lock()
-	// generate a timestamp key inside the lock, so we're ensured to receive a unique one.
-	key := fmt.Sprintf("%d", time.Now().UnixNano())
-	if w.last.u != nil {
-		tx <- *w.last.u
-	}
-	w.last.Unlock()
-
-	w.clients.Lock()
-	if w.clients.m == nil {
-		w.clients.m = make(map[string]chan string)
-	}
-	w.clients.m[key] = tx
-	w.clients.Unlock()
-
-	return &rx{
-		c: tx,
-		close: func() {
-			close(tx)
-			w.clients.Lock()
-			delete(w.clients.m, key)
-			w.clients.Unlock()
-		},
-	}
-}
-
-func (w *UpdatesWriter) accept(ctx context.Context, l net.Listener) {
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			log.Printf("[ERROR] uds listener: %v", err)
-			return
-		}
-
-		rx := w.getTx()
-		go serveUpdates(ctx, conn, rx)
-	}
-}
-
-func serveUpdates(ctx context.Context, conn net.Conn, rx *rx) {
-	defer conn.Close()
-	defer rx.close()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("[INFO] closing connection to %v: %v", conn.RemoteAddr().String(), ctx.Err())
-		case u := <-rx.c:
-			// Note: If the connection is closed, we will not be able to detect it
-			// util the next time that we try to write something into it.
-			if _, err := conn.Write([]byte(u)); err != nil {
-				log.Printf("[ERROR] unable to write update to connection %v: %v", conn.RemoteAddr().String(), err)
-				return
-			}
-		}
-	}
-}
 func main() {
 	mockCmd.Execute()
 }
