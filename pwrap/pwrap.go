@@ -348,7 +348,7 @@ func (p *PWrap) run(ctx context.Context) error {
 func (p *PWrap) Trash() error {
 	if p.sid != "" {
 		if err := tmux.KillSession(p.sid); err != nil {
-			return fmt.Errorf("unable to trash process wrapper: %w", err)
+			log.Printf("[WARN] error while trashing session: %w", err)
 		}
 	}
 	return p.trashFiles()
