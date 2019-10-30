@@ -26,11 +26,18 @@ type Router struct {
 	*mux.Router
 	keepFiles bool
 	execName  string
+	args      []string
 }
 
 func KeepFiles(ok bool) func(*Router) {
 	return func(r *Router) {
 		r.keepFiles = ok
+	}
+}
+
+func Args(args []string) func(*Router) {
+	return func(r *Router) {
+		r.args = args
 	}
 }
 
@@ -52,7 +59,7 @@ func NewRouter(execName string, opts ...func(*Router)) *Router {
 	h := &SessionHandler{}
 	v1 := r.PathPrefix("/api/v1").Subrouter()
 	v1.HandleFunc("/sessions", h.HandleList()).Methods("GET")
-	v1.HandleFunc("/sessions", h.HandleCreate(execName)).Methods("POST")
+	v1.HandleFunc("/sessions", h.HandleCreate(execName, r.args...)).Methods("POST")
 	v1.HandleFunc("/sessions/{sid}", h.HandleDelete(r.keepFiles)).Methods("DELETE")
 
 	return r

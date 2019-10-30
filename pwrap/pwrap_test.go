@@ -52,12 +52,12 @@ func TestNew(t *testing.T) {
 func TestNew_ExecName(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(ExecName("nxtfxxnd"))
+	_, err := New(Exec("nxtfxxnd"))
 	if (err != nil && !errors.Is(err, exec.ErrNotFound)) || err == nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	_, err = New(ExecName("yes"))
+	_, err = New(Exec("yes"))
 	if err != nil {
 		t.Fatal(err)
 	}

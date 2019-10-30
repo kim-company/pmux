@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/kim-company/pmux/http/pmuxapi"
@@ -29,6 +30,7 @@ import (
 
 var port int
 var execName string
+var childArgsRaw string
 var dirty bool
 
 // serverCmd represents the server command
@@ -36,7 +38,10 @@ var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "A brief description of your command",
 	Run: func(cmd *cobra.Command, args []string) {
-		r := pmuxapi.NewRouter(execName, pmuxapi.KeepFiles(dirty))
+		r := pmuxapi.NewRouter(execName,
+			pmuxapi.Args(strings.Split(childArgsRaw, ",")),
+			pmuxapi.KeepFiles(dirty),
+		)
 		srv := &http.Server{
 			Addr:         fmt.Sprintf("0.0.0.0:%d", port),
 			WriteTimeout: time.Second * 15,
@@ -93,5 +98,6 @@ func init() {
 func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 4002, "Server listening port.")
 	serverCmd.Flags().StringVarP(&execName, "exec-name", "n", "bin/mockcmd", "Pmux will spawn sessions running this executable.")
+	serverCmd.Flags().StringVarP(&childArgsRaw, "args", "", "", "Comma separated list of arguments that pmux will use togheter with \"execName\".")
 	serverCmd.Flags().BoolVarP(&dirty, "dirty", "", false, "Enables dirty mode: all files created by pmux child processes are kept.")
 }
