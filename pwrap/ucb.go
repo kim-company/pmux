@@ -75,6 +75,9 @@ func NewUnixCommBridge(ctx context.Context, path string, opts ...func(*UnixCommB
 	return u, nil
 }
 
+// Open makes the socket accept new connections. Open is expected to run in its own gorountine. Context
+// cancelation will not make the function quit, but it will close any pending connection activity. To
+// make the function exit b.Close() should be used instead, which will close the underlying unix socket.
 func (b *UnixCommBridge) Open(ctx context.Context) {
 	for {
 		conn, err := b.Listener.Accept()
@@ -87,13 +90,17 @@ func (b *UnixCommBridge) Open(ctx context.Context) {
 	}
 }
 
+// Close closes the unix listener and will remove its socket file.
 func (b *UnixCommBridge) Close() error {
 	defer os.Remove(b.path)
 	return b.Listener.Close()
 }
 
+// WriteProgressUpdateFunc describes the signature of a progress writer function.
 type WriteProgressUpdateFunc func(stages, stage, tot, partial int, d string) error
 
+// WriteProgressUpdate is an helper function that writes the data in the underlying socket, using
+// csv for encoding. The first call to the function will also print the csv header.
 func (b *UnixCommBridge) WriteProgressUpdate(stages, stage, tot, partial int, d string) error {
 	w := csv.NewWriter(b)
 	if !b.wroteCSVHeader {
@@ -117,6 +124,8 @@ func (b *UnixCommBridge) WriteProgressUpdate(stages, stage, tot, partial int, d 
 	return nil
 }
 
+// Write is an ``io.Writer'' implementation, which delivers the content written to each client
+// listening on the socket.
 func (b *UnixCommBridge) Write(p []byte) (int, error) {
 	s := string(p)
 
@@ -220,5 +229,5 @@ func (b *UnixCommBridge) readCommand(ctx context.Context, r *bufio.Reader) error
 	}
 
 	log.Printf("[INFO] command read: %v", cmd)
-	return b.onCommand(b, cmd)
+	return b.onCommand(b, strings.TrimRight(cmd, "\n"))
 }
