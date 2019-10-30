@@ -14,7 +14,6 @@ builds:
       - darwin
       - linux
 signs:
-  -
-    artifacts: checksum
+  - artifacts: checksum
 changelog:
   sort: asc
