@@ -17,7 +17,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -37,24 +36,18 @@ var mockCmd = &cobra.Command{
 	Use:   "mockcmd",
 	Short: "A default mocked command which can be executed by pmux, but does not do anything useful.",
 	Run: func(cmd *cobra.Command, args []string) {
-		var w io.WriteCloser = os.Stdout
 		ctx, cancel := context.WithCancel(context.Background())
-		if sockPath != "" {
-			br, err := pwrap.NewUnixCommBridge(ctx, sockPath, interProcessCmdHandler(cancel))
-			if err != nil {
-				log.Printf("[ERROR] %v", err)
-				return
-			}
-			defer br.Close()
-			w = br
-			go br.Open(ctx)
-		}
+		defer cancel()
+
+		pw, close := makeProgressWriter(ctx, cancel, sockPath)
+		defer close()
 
 		for i := 0; ; i++ {
-			fmt.Fprintf(w, "waiting %d...", i)
 			select {
 			case <-time.After(time.Millisecond * 1000):
-				fmt.Fprintf(w, "done!\n")
+				if err := pw(-1, -1, -1, i, "waited 1 second"); err != nil {
+					log.Printf("[ERROR] %v", err)
+				}
 			case <-ctx.Done():
 				log.Printf("[INFO] exiting: %v", ctx.Err())
 				return
@@ -63,7 +56,28 @@ var mockCmd = &cobra.Command{
 	},
 }
 
-func interProcessCmdHandler(cancel context.CancelFunc) func(*pwrap.UnixCommBridge) {
+func writeProgressUpdateDefault(stages, stage, tot, partial int, d string) error {
+	fmt.Fprintf(os.Stdout, "%d: %s\n", partial, d)
+	return nil
+}
+
+func makeProgressWriter(ctx context.Context, cancel context.CancelFunc, sockPath string) (pwrap.WriteProgressUpdateFunc, func()) {
+	if sockPath == "" {
+		return writeProgressUpdateDefault, func() {}
+	}
+
+	br, err := pwrap.NewUnixCommBridge(ctx, sockPath, makeOnCommandOption(cancel))
+	if err != nil {
+		log.Printf("[ERROR] unable to make progress writer: %v", err)
+		return writeProgressUpdateDefault, func() {}
+	}
+	go br.Open(ctx)
+	return br.WriteProgressUpdate, func() {
+		br.Close()
+	}
+}
+
+func makeOnCommandOption(cancel context.CancelFunc) func(*pwrap.UnixCommBridge) {
 	return pwrap.OnCommand(func(u *pwrap.UnixCommBridge, cmd string) error {
 		log.Printf("[INFO] command received: %v", cmd)
 		if strings.Contains(cmd, "cancel") {

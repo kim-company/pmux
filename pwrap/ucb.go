@@ -17,11 +17,13 @@ package pwrap
 import (
 	"bufio"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +47,7 @@ type UnixCommBridge struct {
 		sync.Mutex
 		m map[string]chan string
 	}
+	wroteCSVHeader bool
 
 	onCommand func(*UnixCommBridge, string) error
 }
@@ -60,6 +63,7 @@ func OnCommand(h func(*UnixCommBridge, string) error) func(*UnixCommBridge) {
 // NewUnixCommBridge starts a Unix Domain Socket listener on ``path''.
 // Is is the caller's responsibility to close the listener when it's done.
 func NewUnixCommBridge(ctx context.Context, path string, opts ...func(*UnixCommBridge)) (*UnixCommBridge, error) {
+	os.Remove(path)
 	l, err := new(net.ListenConfig).Listen(ctx, "unix", path)
 	if err != nil {
 		return nil, fmt.Errorf("unable to listen on %v: %w", path, err)
@@ -86,6 +90,31 @@ func (b *UnixCommBridge) Open(ctx context.Context) {
 func (b *UnixCommBridge) Close() error {
 	defer os.Remove(b.path)
 	return b.Listener.Close()
+}
+
+type WriteProgressUpdateFunc func(stages, stage, tot, partial int, d string) error
+
+func (b *UnixCommBridge) WriteProgressUpdate(stages, stage, tot, partial int, d string) error {
+	w := csv.NewWriter(b)
+	if !b.wroteCSVHeader {
+		header := []string{"STAGES", "STAGE", "TOTAL", "PARTIAL", "DESCRIPTION"}
+		if err := w.Write(header); err != nil {
+			return fmt.Errorf("unable to write progress update header: %w", err)
+		}
+		b.wroteCSVHeader = true
+	}
+	if err := w.Write([]string{
+		strconv.Itoa(stages),
+		strconv.Itoa(stage),
+		strconv.Itoa(tot),
+		strconv.Itoa(partial),
+		d,
+	}); err != nil {
+		return fmt.Errorf("unable to write progress update: %w", err)
+	}
+	w.Flush()
+
+	return nil
 }
 
 func (b *UnixCommBridge) Write(p []byte) (int, error) {
