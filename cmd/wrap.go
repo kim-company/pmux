@@ -32,7 +32,7 @@ var rootDir, sid, url string
 var wrapCmd = &cobra.Command{
 	Use:   "wrap",
 	Short: "Execute programs inside a wrapper suitable for interacting with pmux",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: errors are difficult to be detected if this process
 		// started from a `pwrap.StartSession()` call, as it means that we're running
@@ -50,9 +50,8 @@ var wrapCmd = &cobra.Command{
 			cancel()
 		}()
 
-		name := args[0]
 		pw, err := pwrap.New(
-			pwrap.ExecName(name),
+			pwrap.Exec(args[0], args[1:]...),
 			pwrap.OverrideSID(sid),
 			pwrap.RootDir(rootDir),
 			pwrap.Register(url),

@@ -42,6 +42,7 @@ type PWrap struct {
 	rootDir string
 	sid     string
 	name    string
+	args    []string
 	regURL  string
 }
 
@@ -55,14 +56,15 @@ func (p *PWrap) WorkDir() string {
 	return filepath.Join(p.rootDir, p.sid)
 }
 
-// ExecName sets and checks the executable name option.
-func ExecName(n string) func(*PWrap) error {
+// Exec sets the executable and first arguments option.
+func Exec(name string, args ...string) func(*PWrap) error {
 	return func(p *PWrap) error {
-		// Is "n" visible?
-		if _, err := exec.LookPath(n); err != nil {
+		// Is "name" visible?
+		if _, err := exec.LookPath(name); err != nil {
 			return err
 		}
-		p.name = n
+		p.name = name
+		p.args = args
 		return nil
 	}
 }
@@ -124,9 +126,7 @@ func RootDir(path string) func(*PWrap) error {
 
 // New is used to instantiate new PWrap instances.
 func New(opts ...func(*PWrap) error) (*PWrap, error) {
-	// Assign executable name and session identifer.
 	pw := &PWrap{sid: tmux.NewSID()}
-
 	for _, f := range opts {
 		if err := f(pw); err != nil {
 			return nil, fmt.Errorf("unable to apply option on process wrapper initialization: %w", err)
@@ -203,7 +203,10 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
-	if err = tmux.NewSession(sid, os.Args[0], "wrap", p.name, "--root="+p.rootDir, "--sid="+sid, "--reg-url="+p.regURL); err != nil {
+	args := []string{"wrap", p.name}
+	args = append(args, p.args...)
+	args = append(args, "--root="+p.rootDir, "--sid="+sid, "--reg-url="+p.regURL)
+	if err = tmux.NewSession(sid, os.Args[0], args...); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
 
@@ -294,7 +297,8 @@ func (p *PWrap) run(ctx context.Context) error {
 	defer cancel()
 
 	log.Printf("[INFO] executing %s, config: %s, socket path: %s", p.name, paths[0], paths[1])
-	cmd := exec.CommandContext(ctx, p.name, "--config="+paths[0], "--socket-path="+paths[1])
+	args := append(p.args, "--config="+paths[0], "--socket-path="+paths[1])
+	cmd := exec.CommandContext(ctx, p.name, args...)
 	cmd.Stdout = files[0]
 	cmd.Stderr = files[1]
 

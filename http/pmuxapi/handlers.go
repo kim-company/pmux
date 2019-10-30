@@ -57,7 +57,7 @@ func (h *SessionHandler) HandleList() http.HandlerFunc {
 
 var rootDir = filepath.Join(os.TempDir(), "pmux", "sessionsd")
 
-func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
+func (h *SessionHandler) HandleCreate(name string, args ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		var c struct {
@@ -69,7 +69,7 @@ func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 			return
 		}
 
-		pw, err := pwrap.New(pwrap.ExecName(execName), pwrap.RootDir(rootDir), pwrap.Register(c.URL))
+		pw, err := pwrap.New(pwrap.Exec(name, args...), pwrap.RootDir(rootDir), pwrap.Register(c.URL))
 		if err != nil {
 			h.writeError(w, err, http.StatusInternalServerError)
 			return
@@ -87,7 +87,7 @@ func (h *SessionHandler) HandleCreate(execName string) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("[INFO] Starting [%v] session, working dir: %v", execName, pw.WorkDir())
+		log.Printf("[INFO] Starting [%v] session, working dir: %v", name, pw.WorkDir())
 		sid, err := pw.StartSession()
 		if err != nil {
 			h.writeError(w, err, http.StatusInternalServerError)
