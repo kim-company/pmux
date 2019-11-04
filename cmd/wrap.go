@@ -26,13 +26,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootDir, sid, url string
+var rootDir, sid, url, stderr string
 
 // wrapCmd represents the pwrap command
 var wrapCmd = &cobra.Command{
 	Use:   "wrap",
 	Short: "Execute programs inside a wrapper suitable for interacting with pmux",
 	Args:  cobra.MinimumNArgs(1),
+	PreRun: func(cmd *cobra.Command, args []string) {
+		if stderr == "" {
+			return
+		}
+		f, err := os.OpenFile(stderr, os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm)
+		if err != nil {
+			log.Printf("[ERROR] unable to open stderr: %v", err)
+			return
+		}
+		log.SetOutput(f)
+		os.Stderr = f
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: errors are difficult to be detected if this process
 		// started from a `pwrap.StartSession()` call, as it means that we're running
@@ -70,4 +82,5 @@ func init() {
 	wrapCmd.Flags().StringVarP(&rootDir, "root", "", "", "Root process sandbox directory.")
 	wrapCmd.Flags().StringVarP(&sid, "sid", "", tmux.NewSID(), "Override session identifier.")
 	wrapCmd.Flags().StringVarP(&url, "reg-url", "", "", "Set registration URL to contact before running the task.")
+	wrapCmd.Flags().StringVarP(&stderr, "stderr", "", "", "Pipe wrapper's stderr.")
 }
