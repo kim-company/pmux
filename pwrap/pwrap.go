@@ -203,9 +203,18 @@ func (p *PWrap) StartSession() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not write session identifier: %w", err)
 	}
+	// Note: the child process will write it's data in the specified files of the working
+	// directory. The wrapper process though does not have any instruction to follow those
+	// guidelines. This is why we explicitly set the flags, to make also the wrapper write
+	// it's errors into the same file as the child does.
 	args := []string{"wrap", p.name}
 	args = append(args, p.args...)
-	args = append(args, "--root="+p.rootDir, "--sid="+sid, "--reg-url="+p.regURL)
+	args = append(args,
+		"--root="+p.rootDir,
+		"--sid="+sid,
+		"--reg-url="+p.regURL,
+		"--stderr="+p.Path(FileStderr),
+	)
 	if err = tmux.NewSession(sid, os.Args[0], args...); err != nil {
 		return "", fmt.Errorf("could not start process wrapper session: %w", err)
 	}
@@ -254,26 +263,51 @@ func (p *PWrap) Register(port int) error {
 	return nil
 }
 
+type WrapStatus string
+
+const (
+	WrapStatusError   WrapStatus = "error"
+	WrapStatusSuccess            = "success"
+)
+
+func (p *PWrap) Callback(err error) error {
+	log.Printf("[INFO] callbacking for wrapper %s with err: %v", p.sid, err)
+	if p.regURL == "" {
+		log.Printf("[WARN] registration URL not set")
+		return nil
+	}
+
+	var payload struct {
+		Error  string `json:"error"`
+		Status string `json:"status"`
+	}
+	payload.Status = WrapStatusSuccess
+	if err != nil {
+		payload.Error = err.Error()
+		payload.Status = string(WrapStatusError)
+	}
+
+	buf := bytes.Buffer{}
+	if err := json.NewEncoder(&buf).Encode(&payload); err != nil {
+		return fmt.Errorf("error while building callback payload: %w", err)
+	}
+	resp, err := http.Post(p.regURL, "application/json", &buf)
+	if err != nil {
+		return fmt.Errorf("callback error: %w", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(ioutil.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("registration failed: status code returned is: %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Run executes "p"'s command and waits for it to exit. Its stderr and stdout pipes are
 // connected to their relative files inside process's root directory.
 // The underlying program is executed running `<ename> --config=<configuration file path>`.
 // If an error occurs, is is both returned and written into wrapper's stderr, if possible.
 func (p *PWrap) Run(ctx context.Context) error {
-	if err := p.run(ctx); err != nil {
-		log.Printf("[ERROR] run exited: %v", err)
-		f, ferr := p.Open(FileStderr, os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm)
-		if ferr != nil {
-			return fmt.Errorf("unable to write run error %w, which is: %w", ferr, err)
-		}
-		if _, werr := f.Write([]byte(err.Error() + "\n")); werr != nil {
-			return fmt.Errorf("unable to write run error %w, which is: %w", werr, err)
-		}
-		return err
-	}
-	return nil
-}
-
-func (p *PWrap) run(ctx context.Context) error {
 	port, err := freeport.GetFreePort()
 	if err != nil {
 		return fmt.Errorf("unable to run: failed getting free port: %w", err)
@@ -281,7 +315,17 @@ func (p *PWrap) run(ctx context.Context) error {
 	if err = p.Register(port); err != nil {
 		return fmt.Errorf("unable to run: %w", err)
 	}
+	err = p.run(ctx, port)
+	if err != nil {
+		return err
+	}
+	if err = p.Callback(err); err != nil {
+		return err
+	}
+	return nil
+}
 
+func (p *PWrap) run(ctx context.Context, port int) error {
 	files, err := p.openMore(os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm, FileStdout, FileStderr)
 	if err != nil {
 		return fmt.Errorf("unable to run: failed opening stderr and stdout files: %w", err)
