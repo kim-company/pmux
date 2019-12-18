@@ -87,25 +87,25 @@ func (b *UnixCommBridge) Close() error {
 }
 
 // WriteProgressUpdateFunc describes the signature of a progress writer function.
-type WriteProgressUpdateFunc func(stages, stage, tot, partial int, d string) error
+type WriteProgressUpdateFunc func(d string, stage, stages, partial, tot int) error
 
 // WriteProgressUpdate is an helper function that writes the data in the underlying socket, using
 // csv for encoding. The first call to the function will also print the csv header.
-func (b *UnixCommBridge) WriteProgressUpdate(stages, stage, tot, partial int, d string) error {
+func (b *UnixCommBridge) WriteProgressUpdate(d string, stages, stage, tot, partial int) error {
 	w := csv.NewWriter(b)
 	if !b.wroteCSVHeader {
-		header := []string{"STAGES", "STAGE", "TOTAL", "PARTIAL", "DESCRIPTION"}
+		header := []string{"DESCRIPTION", "STAGES", "STAGE", "TOTAL", "PARTIAL"}
 		if err := w.Write(header); err != nil {
 			return fmt.Errorf("unable to write progress update header: %w", err)
 		}
 		b.wroteCSVHeader = true
 	}
 	if err := w.Write([]string{
+		d,
 		strconv.Itoa(stages),
 		strconv.Itoa(stage),
 		strconv.Itoa(tot),
 		strconv.Itoa(partial),
-		d,
 	}); err != nil {
 		return fmt.Errorf("unable to write progress update: %w", err)
 	}
