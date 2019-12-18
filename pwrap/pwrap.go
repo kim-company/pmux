@@ -379,7 +379,11 @@ func (p *PWrap) run(ctx context.Context, port int) error {
 	ctx, cancel = context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
-	<-errc
+	select {
+	case <-errc:
+	case <-time.After(time.Second*5):
+		log.Printf("[WARN] pwrap run was stuck (for 5 seconds) waiting for the server to quit")
+	}
 
 	if err != nil {
 		return fmt.Errorf("run exited with error: %w", err)
