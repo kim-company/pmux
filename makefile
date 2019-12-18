@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2019 KIM KeepInMind GmbH
+#
+# SPDX-License-Identifier: MIT
+
 VERSION          := $(shell git describe --tags --always --dirty="-dev")
 COMMIT           := $(shell git rev-parse --short HEAD)
 DATE             := $(shell date -u '+%Y-%m-%d-%H%M UTC')

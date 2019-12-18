@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: pmux
+Upstream-Contact: Daniel Morandini <daniel.morandini@keepinmind.info>
+Source: https://github.com/kim-company/pmux
+
+# Sample paragraph, commented out:
+#
+# Files: src/*
+# Copyright: $YEAR $NAME <$CONTACT>
+# License: ...
+
+Files: go.mod go.sum
+Copyright: 2019 KIM KeepInMind GmbH <daniel.morandini@keepinmind.info>
+License: MIT
+
+Files: README.md
+Copyright: 2019 KIM KeepInMind GmbH <daniel.morandini@keepinmind.info>
+License: MIT
