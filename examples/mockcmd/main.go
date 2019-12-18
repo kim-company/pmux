@@ -35,7 +35,7 @@ var mockCmd = &cobra.Command{
 		for i := 0; ; i++ {
 			select {
 			case <-time.After(time.Millisecond * 1000):
-				if err := pw(-1, -1, -1, i, "waited 1 second"); err != nil {
+				if err := pw("waited 1 second", -1, -1, i, -1); err != nil {
 					log.Printf("[ERROR] %v", err)
 				}
 			case <-ctx.Done():
@@ -46,7 +46,7 @@ var mockCmd = &cobra.Command{
 	},
 }
 
-func writeProgressUpdateDefault(stages, stage, tot, partial int, d string) error {
+func writeProgressUpdateDefault(d string, stage, stages, partial, tot int) error {
 	fmt.Fprintf(os.Stdout, "%d: %s\n", partial, d)
 	return nil
 }

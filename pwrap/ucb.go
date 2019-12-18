@@ -71,6 +71,7 @@ func NewUnixCommBridge(ctx context.Context, path string, opts ...func(*UnixCommB
 func (b *UnixCommBridge) Open(ctx context.Context) {
 	for {
 		conn, err := b.Listener.Accept()
+
 		if err != nil {
 			log.Printf("[ERROR] unable to accept more connections: %v", err)
 			return
@@ -91,10 +92,10 @@ type WriteProgressUpdateFunc func(d string, stage, stages, partial, tot int) err
 
 // WriteProgressUpdate is an helper function that writes the data in the underlying socket, using
 // csv for encoding. The first call to the function will also print the csv header.
-func (b *UnixCommBridge) WriteProgressUpdate(d string, stages, stage, tot, partial int) error {
+func (b *UnixCommBridge) WriteProgressUpdate(d string, stage, stages, partial, tot int) error {
 	w := csv.NewWriter(b)
 	if !b.wroteCSVHeader {
-		header := []string{"DESCRIPTION", "STAGES", "STAGE", "TOTAL", "PARTIAL"}
+		header := []string{"DESCRIPTION", "STAGE", "STAGES", "PARTIAL", "TOTAL"}
 		if err := w.Write(header); err != nil {
 			return fmt.Errorf("unable to write progress update header: %w", err)
 		}
@@ -102,10 +103,10 @@ func (b *UnixCommBridge) WriteProgressUpdate(d string, stages, stage, tot, parti
 	}
 	if err := w.Write([]string{
 		d,
-		strconv.Itoa(stages),
 		strconv.Itoa(stage),
-		strconv.Itoa(tot),
+		strconv.Itoa(stages),
 		strconv.Itoa(partial),
+		strconv.Itoa(tot),
 	}); err != nil {
 		return fmt.Errorf("unable to write progress update: %w", err)
 	}
