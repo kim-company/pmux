@@ -8,10 +8,11 @@ MOCK=examples/mockcmd/main.go
 
 .PHONY: all pmux mockcmd
 all: pmux mockcmd
+
 pmux: main.go
-	go build -o bin/pmux $(VERSION_FLAGS) main.go
+	go build -o bin/$@ $(VERSION_FLAGS) $^
 mockcmd: $(MOCK)
-	go build -o bin/mockcmd $(MOCK)
+	go build -o bin/$@ $^
 test:
 	go test ./...
 format:
