@@ -60,13 +60,11 @@ var serverCmd = &cobra.Command{
 		// Create a deadline to wait for.
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
+
 		// Doesn't block if no connections, but will otherwise wait
 		// until the timeout deadline.
+		log.Println("Server is shutting down...")
 		srv.Shutdown(ctx)
-		// Optionally, you could run srv.Shutdown in a goroutine and block on
-		// <-ctx.Done() if your application should wait for other services
-		// to finalize based on context cancellation.
-		log.Println("Shutting down...")
 		os.Exit(0)
 	},
 }
@@ -74,18 +72,6 @@ var serverCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(serverCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// serverCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// serverCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-}
-
-func init() {
 	serverCmd.Flags().IntVarP(&port, "port", "p", 4002, "Server listening port.")
 	serverCmd.Flags().StringVarP(&execName, "exec-name", "n", "bin/mockcmd", "Pmux will spawn sessions running this executable.")
 	serverCmd.Flags().StringVarP(&childArgsRaw, "args", "", "", "Comma separated list of arguments that pmux will use togheter with \"execName\".")
