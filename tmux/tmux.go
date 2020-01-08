@@ -57,7 +57,7 @@ func validateSID(s string) error {
 // the `validateSID` function, and the function will return an error if the validation
 // does not pass. Use `NewSID` to build a valid session identifier, or validate it first
 // manually.
-// Note that there are not guarantees that the session will still be running after
+// Note that there are no guarantees that the session will still be running after
 // this function returns.
 func NewSession(sid, name string, args ...string) error {
 	if err := validateSID(sid); err != nil {
