@@ -305,14 +305,21 @@ func (p *PWrap) Run(ctx context.Context) error {
 	if err = p.Register(port); err != nil {
 		return fmt.Errorf("unable to run: %w", err)
 	}
-	err = p.run(ctx, port)
-	if err != nil {
-		return err
+
+	rerr := p.run(ctx, port)
+	cerr := p.Callback(rerr) // Callback in any case!
+
+	switch {
+	case rerr != nil && cerr != nil:
+		// We were not able to both run & callback.
+		return fmt.Errorf("%w: %w", rerr, cerr)
+	case rerr != nil:
+		return rerr
+	case cerr != nil:
+		return cerr
+	default:
+		return nil
 	}
-	if err = p.Callback(err); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (p *PWrap) run(ctx context.Context, port int) error {
