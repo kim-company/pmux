@@ -3,13 +3,7 @@ Upstream-Name: pmux
 Upstream-Contact: Daniel Morandini <daniel.morandini@keepinmind.info>
 Source: https://github.com/kim-company/pmux
 
-# Sample paragraph, commented out:
-#
-# Files: src/*
-# Copyright: $YEAR $NAME <$CONTACT>
-# License: ...
-
-Files: go.mod go.sum
+Files: go.mod go.sum examples/*
 Copyright: 2019 KIM KeepInMind GmbH <daniel.morandini@keepinmind.info>
 License: MIT
 
