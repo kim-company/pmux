@@ -20,6 +20,15 @@ import (
 type SessionHandler struct {
 }
 
+func (h *SessionHandler) writeSID(w http.ResponseWriter, sid string) error {
+	payload := struct {
+		SID string `json:"sid"`
+	}{
+		SID: sid,
+	}
+	return h.writeResponse(w, &payload)
+}
+
 func (h *SessionHandler) writeResponse(w http.ResponseWriter, p interface{}) error {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(p); err != nil {
@@ -84,7 +93,7 @@ func (h *SessionHandler) HandleCreate(name string, args ...string) http.HandlerF
 			pw.Trash()
 			return
 		}
-		if err = h.writeResponse(w, sid); err != nil {
+		if err = h.writeSID(w, sid); err != nil {
 			pw.Trash()
 		}
 	}
@@ -112,6 +121,6 @@ func (h *SessionHandler) HandleDelete(keepFiles bool) http.HandlerFunc {
 			h.writeError(w, err, http.StatusInternalServerError)
 			return
 		}
-		h.writeResponse(w, sid)
+		h.writeSID(w, sid)
 	}
 }
